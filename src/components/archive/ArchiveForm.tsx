@@ -266,7 +266,7 @@ export default function ArchiveForm({
                   value={formData.klasifikasi || ""}
                   onChange={(e) => handleChange("klasifikasi", e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Contoh: HM.01.02"
+                  placeholder="Contoh: HM.01.02.05"
                 />
               </div>
 

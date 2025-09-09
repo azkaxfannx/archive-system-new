@@ -27,6 +27,7 @@ export async function GET() {
   // Kalau ADMIN → tidak ada filter ({}), kalau USER → filter berdasarkan userId
   const baseWhere = role === "ADMIN" ? {} : { userId };
 
+  // Stats arsip seperti biasa
   const totalCount = await prisma.archive.count({ where: baseWhere });
   const activeCount = await prisma.archive.count({
     where: { ...baseWhere, status: "ACTIVE" },
@@ -38,10 +39,69 @@ export async function GET() {
     where: { ...baseWhere, status: "DISPOSE_ELIGIBLE" },
   });
 
+  // Hitung total box berdasarkan klasifikasi
+  const archivesWithKlasifikasi = await prisma.archive.findMany({
+    where: {
+      ...baseWhere,
+      klasifikasi: {
+        not: null,
+      },
+    },
+    select: {
+      klasifikasi: true,
+    },
+  });
+
+  // Parse klasifikasi dan hitung box per kategori
+  const boxStats = archivesWithKlasifikasi.reduce((acc, archive) => {
+    if (archive.klasifikasi) {
+      const parts = archive.klasifikasi.split(".");
+
+      // Pastikan format sesuai (minimal 4 bagian: KATEGORI.RAK.BARIS.BOX)
+      if (parts.length >= 4) {
+        const kategori = parts[0]; // HM, KS, TEK, dll
+        const boxNum = parseInt(parts[3]); // nomor box
+
+        if (!isNaN(boxNum)) {
+          if (!acc[kategori]) {
+            acc[kategori] = {
+              maxBox: 0,
+              totalArchives: 0,
+            };
+          }
+
+          acc[kategori].maxBox = Math.max(acc[kategori].maxBox, boxNum);
+          acc[kategori].totalArchives += 1;
+        }
+      }
+    }
+    return acc;
+  }, {} as Record<string, { maxBox: number; totalArchives: number }>);
+
+  // Hitung total box keseluruhan
+  const totalBoxCount = Object.values(boxStats).reduce(
+    (sum, stat) => sum + stat.maxBox,
+    0
+  );
+
+  // Format response untuk box stats
+  const boxStatsByCategory = Object.entries(boxStats).map(
+    ([kategori, data]) => ({
+      kategori,
+      totalBox: data.maxBox,
+      totalArchives: data.totalArchives,
+    })
+  );
+
   return NextResponse.json({
+    // Stats arsip
     totalCount,
     activeCount,
     inactiveCount,
     disposeCount,
+
+    // Stats box
+    totalBoxCount,
+    boxStatsByCategory,
   });
 }

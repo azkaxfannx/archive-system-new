@@ -27,6 +27,21 @@ import ExportResultModal from "../ui/modal/ExportResultModal";
 import ImportResultModal from "../ui/modal/ImportResultModal";
 import DeleteConfirmationModal from "../ui/modal/DeleteConfirmationModal";
 
+interface BoxStats {
+  kategori: string;
+  totalBox: number;
+  totalArchives: number;
+}
+
+interface StatsData {
+  totalCount: number;
+  activeCount: number;
+  inactiveCount: number;
+  disposeCount: number;
+  totalBoxCount: number;
+  boxStatsByCategory: BoxStats[];
+}
+
 // Error Modal Component for Peminjaman
 const PeminjamanErrorModal = ({
   isOpen,
@@ -168,11 +183,13 @@ export default function ArchiveManagement() {
   });
 
   // Count states
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<StatsData>({
     totalCount: 0,
     activeCount: 0,
     inactiveCount: 0,
     disposeCount: 0,
+    totalBoxCount: 0,
+    boxStatsByCategory: [],
   });
 
   useEffect(() => {
@@ -626,6 +643,8 @@ export default function ArchiveManagement() {
           activeCount={stats.activeCount}
           inactiveCount={stats.inactiveCount}
           disposeCount={stats.disposeCount}
+          totalBoxCount={stats.totalBoxCount}
+          boxStatsByCategory={stats.boxStatsByCategory}
         />
 
         {/* Archive Table */}
