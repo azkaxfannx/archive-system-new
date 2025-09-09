@@ -1,0 +1,81 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(uuid())
+  name      String
+  email     String    @unique
+  password  String    // simpan hash!
+  role      Role      @default(USER)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  archives  Archive[]
+}
+
+model Archive {
+  id                  String       @id @default(uuid())
+  kodeUnit            String?
+  indeks              String?
+  nomorBerkas         String?
+  judulBerkas         String?
+  nomorIsiBerkas      String?
+  jenisNaskahDinas    String?
+  klasifikasi         String?
+  nomorSurat          String?
+  tanggal             DateTime?
+  perihal             String?
+  tahun               Int?
+  tingkatPerkembangan String?
+  kondisi             String?
+  lokasiSimpan        String?
+  retensiAktif        String?
+  keterangan          String?
+  entryDate           DateTime
+  retentionYears      Int
+  status              Status       @default(ACTIVE)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  // Owner (pengupload)
+  userId              String
+  user                User         @relation(fields: [userId], references: [id])
+
+  // Relasi Peminjaman
+  peminjaman          Peminjaman[]
+}
+
+model Peminjaman {
+  id                  String    @id @default(uuid())
+  nomorSurat          String
+  peminjam            String
+  keperluan           String
+  tanggalPinjam       DateTime
+  tanggalHarusKembali DateTime
+  tanggalPengembalian DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  archiveId           String
+  archive             Archive   @relation(fields: [archiveId], references: [id], onDelete: Cascade)
+
+  @@map("peminjaman")
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+  DISPOSE_ELIGIBLE
+}
+
+enum Role {
+  ADMIN
+  USER
+}
