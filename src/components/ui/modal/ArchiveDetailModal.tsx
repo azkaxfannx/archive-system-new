@@ -8,11 +8,13 @@ import StatusBadge from "@/components/ui/StatusBadge";
 interface ArchiveDetailModalProps {
   archive: ArchiveRecord;
   onClose: () => void;
+  currentUserRole: "ADMIN" | "USER";
 }
 
 export default function ArchiveDetailModal({
   archive,
   onClose,
+  currentUserRole,
 }: ArchiveDetailModalProps) {
   const formatDate = (dateString: string) => {
     if (!dateString) return "-";
@@ -28,6 +30,14 @@ export default function ArchiveDetailModal({
     if (!dateString) return "-";
     return new Date(dateString).toLocaleString("id-ID");
   };
+
+  // Debug log untuk memeriksa data
+  // console.log("Archive data in detail modal:", {
+  //   currentUserRole,
+  //   archiveUser: archive.user,
+  //   hasUser: !!archive.user,
+  //   userName: archive.user?.name,
+  // });
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -274,6 +284,20 @@ export default function ArchiveDetailModal({
                   <p className="text-gray-900">
                     {formatDateTime(archive.createdAt)}
                   </p>
+                  {/* FIXED: Perbaikan kondisi untuk menampilkan nama uploader */}
+                  {currentUserRole === "ADMIN" && archive.user?.name && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Oleh: {archive.user.name}
+                    </p>
+                  )}
+
+                  {/* Debug info - hapus setelah berhasil */}
+                  {/* {process.env.NODE_ENV === "development" && (
+                    <div className="text-xs text-red-500 mt-2">
+                      Debug: Role={currentUserRole}, HasUser={!!archive.user},
+                      UserName={archive.user?.name}
+                    </div>
+                  )} */}
                 </div>
                 <div>
                   <label className="font-medium text-gray-600">

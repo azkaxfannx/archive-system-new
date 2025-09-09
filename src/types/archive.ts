@@ -22,6 +22,12 @@ export interface ArchiveRecord {
   status: "ACTIVE" | "INACTIVE" | "DISPOSE_ELIGIBLE";
   createdAt: string;
   updatedAt: string;
+
+  user?: {
+    id: string;
+    name: string;
+    role: "ADMIN" | "USER";
+  };
 }
 
 // Form data interface

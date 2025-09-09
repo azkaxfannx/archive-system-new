@@ -579,6 +579,7 @@ export default function ArchiveManagement() {
         <ArchiveDetailModal
           archive={selectedArchive}
           onClose={() => setShowDetailModal(false)}
+          currentUserRole={user?.role}
         />
       )}
 

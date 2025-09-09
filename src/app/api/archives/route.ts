@@ -162,6 +162,15 @@ export async function GET(req: NextRequest) {
         orderBy,
         skip,
         take: limit,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              role: true,
+            },
+          },
+        },
       }),
       prisma.archive.count({
         where: finalWhere,

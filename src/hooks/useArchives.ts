@@ -26,7 +26,21 @@ interface ArchiveResponse {
   };
 }
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = async (url: string) => {
+  const response = await fetch(url, {
+    method: "GET",
+    credentials: "include", // Important untuk cookie-based auth
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  return response.json();
+};
 
 export function useArchives(params: UseArchivesParams) {
   const {

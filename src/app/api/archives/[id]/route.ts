@@ -35,6 +35,15 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
     const archive = await prisma.archive.findUnique({
       where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+          },
+        },
+      },
     });
 
     if (!archive) {
