@@ -22,7 +22,7 @@ export async function GET() {
 
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, nip: true, role: true },
     });
 
     if (!user) {
@@ -30,7 +30,7 @@ export async function GET() {
       return NextResponse.json({ user: null }, { status: 401 });
     }
 
-    console.log("Me route - Success, user:", user.email); // Debug log
+    console.log("Me route - Success, user:", user.nip); // Debug log
     return NextResponse.json({ user });
   } catch (error: any) {
     console.error("Me route error:", error);

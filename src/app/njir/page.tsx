@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
-  const [email, setEmail] = useState("");
+  const [nip, setNip] = useState("");
   const [password, setPassword] = useState("");
   const [nama, setNama] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -15,7 +15,7 @@ export default function RegisterPage() {
     const res = await fetch(`/api/auth/register/${role}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nama, email, password }),
+      body: JSON.stringify({ nama, nip, password }),
     });
 
     if (!res.ok) {
@@ -44,10 +44,10 @@ export default function RegisterPage() {
           />
           <input
             className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Nip"
+            type="text"
+            value={nip}
+            onChange={(e) => setNip(e.target.value)}
           />
           <input
             className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"

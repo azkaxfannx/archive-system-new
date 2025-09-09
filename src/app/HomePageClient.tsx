@@ -7,14 +7,14 @@ import ArchiveManagement from "@/components/archive/ArchiveManagement";
 import "../app/globals.css";
 
 export default function HomePageClient() {
-    console.log("✅ HomePageClient rendered");  
+  console.log("✅ HomePageClient rendered");
   const searchParams = useSearchParams();
   const router = useRouter();
   const [isAuth, setIsAuth] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
 
-console.log("Render HomePage", { isAuth, isLoading, user });
+  console.log("Render HomePage", { isAuth, isLoading, user });
 
   // Centralized auth check function
   const checkAuth = async (retryCount = 0) => {
@@ -38,7 +38,7 @@ console.log("Render HomePage", { isAuth, isLoading, user });
         console.log("Auth check data:", data); // Debug log
 
         if (data.user) {
-            console.log("✅ Setting isAuth TRUE");
+          console.log("✅ Setting isAuth TRUE");
           setUser(data.user);
           setIsAuth(true);
           return true;
@@ -132,13 +132,13 @@ console.log("Render HomePage", { isAuth, isLoading, user });
           </button>
         </div>
 
-        <div className="flex items-center space-x-4">
+        {/* <div className="flex items-center space-x-4">
           {user && (
             <span className="text-sm text-gray-600">
               Welcome, {user.name || user.email}
             </span>
           )}
-        </div>
+        </div> */}
       </div>
 
       {tab === "archive" ? <ArchiveManagement /> : <PeminjamanManagement />}

@@ -7,7 +7,11 @@ export const runtime = "nodejs";
 
 const RegisterSchema = z.object({
   nama: z.string().min(1, "Nama tidak boleh kosong"),
-  email: z.string().email("Email tidak valid"),
+  nip: z
+    .string()
+    .min(8, "NIP minimal 8 digit")
+    .max(18, "NIP maksimal 18 digit")
+    .regex(/^\d+$/, "NIP harus berupa angka"),
   password: z.string().min(6, "Password minimal 6 karakter"),
 });
 
@@ -25,19 +29,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: msg }, { status: 400 });
     }
 
-    const { nama, email, password } = parse.data;
+    const { nama, nip, password } = parse.data;
 
-    const exist = await prisma.user.findUnique({ where: { email } });
+    const exist = await prisma.user.findUnique({ where: { nip } });
     if (exist) {
       return NextResponse.json(
-        { error: "Email sudah terdaftar" },
+        { error: "NIP sudah terdaftar" },
         { status: 409 }
       );
     }
 
     const hash = await bcrypt.hash(password, 10);
     await prisma.user.create({
-      data: { name: nama, email, password: hash, role: "ADMIN" },
+      data: { name: nama, nip, password: hash, role: "ADMIN" },
     });
 
     return NextResponse.json({ ok: true });

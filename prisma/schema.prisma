@@ -11,7 +11,7 @@ datasource db {
 model User {
   id        String    @id @default(uuid())
   name      String
-  email     String    @unique
+  nip       String    @unique
   password  String    // simpan hash!
   role      Role      @default(USER)
   createdAt DateTime  @default(now())

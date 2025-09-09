@@ -36,7 +36,7 @@ export function requireAuth(req: NextRequest) {
       user: {
         userId: decoded.userId,
         role: decoded.role,
-        email: decoded.email,
+        nip: decoded.nip,
         name: decoded.name,
       },
       error: null,

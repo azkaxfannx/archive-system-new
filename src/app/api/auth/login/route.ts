@@ -7,12 +7,12 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const { email, password } = await req.json();
+    const { nip, password } = await req.json();
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { nip } });
     if (!user)
       return NextResponse.json(
-        { error: "Email tidak ditemukan" },
+        { error: "NIP tidak ditemukan" },
         { status: 404 }
       );
 
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       user: {
         id: user.id,
         name: user.name,
-        email: user.email,
+        nip: user.nip,
         role: user.role,
       },
     });
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
+      maxAge: 1 * 24 * 60 * 60, // 7 days in seconds
     });
 
     return res;
