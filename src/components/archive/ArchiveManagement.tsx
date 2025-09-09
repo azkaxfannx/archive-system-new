@@ -9,7 +9,7 @@ import {
 } from "@/types/archive";
 import { useArchives } from "@/hooks/useArchives";
 import { archiveAPI } from "@/services/archiveAPI";
-import * as XLSX from "xlsx";
+import * as ExcelJS from "exceljs";
 import { PAGINATION } from "@/utils/constants";
 
 // Components
@@ -291,10 +291,31 @@ export default function ArchiveManagement() {
     setCurrentPage(1);
   };
 
+  // Define interface for archive data
+  interface ArchiveData {
+    kodeUnit?: string;
+    indeks?: string;
+    nomorBerkas?: string;
+    judulBerkas?: string;
+    nomorIsiBerkas?: string;
+    jenisNaskahDinas?: string;
+    nomorSurat?: string;
+    klasifikasi?: string;
+    perihal?: string;
+    tanggal?: string;
+    tingkatPerkembangan?: string;
+    kondisi?: string;
+    lokasiSimpan?: string;
+    retensiAktif?: string;
+    retensiInaktif?: string;
+    keterangan?: string;
+    retentionYears?: string;
+    status?: string;
+  }
+
   const handleExport = async () => {
     try {
       setIsLoading(true);
-
       const queryParams = new URLSearchParams({
         limit: "999999",
         search: searchQuery,
@@ -307,45 +328,157 @@ export default function ArchiveManagement() {
         }),
         ...(periodFilters.endMonth && { endMonth: periodFilters.endMonth }),
       });
-
       Object.entries(columnFilters).forEach(([key, value]) => {
         queryParams.append(`filter[${key}]`, value);
       });
 
-      // FIXED: Add credentials for cookie-based auth
       const response = await fetch(`/api/archives?${queryParams}`, {
         credentials: "include",
       });
       const result = await response.json();
-      const allArchives = result.data || [];
+      const allArchives: ArchiveData[] = result.data || [];
 
-      const worksheet = XLSX.utils.json_to_sheet(
-        allArchives.map((archive: any) => ({
-          "KODE UNIT": archive.kodeUnit,
-          INDEKS: archive.indeks,
-          "NOMOR BERKAS": archive.nomorBerkas,
-          "JUDUL BERKAS": archive.judulBerkas,
-          "JENIS NASKAH DINAS": archive.jenisNaskahDinas,
-          "NOMOR SURAT": archive.nomorSurat,
-          KLASIFIKASI: archive.klasifikasi,
-          PERIHAL: archive.perihal,
-          "TANGGAL SURAT": archive.tanggal
+      // Guard clause for empty data
+      if (allArchives.length === 0) {
+        setExportResult({
+          fileName: "Tidak ada data untuk diekspor",
+          totalRows: 0,
+        });
+        setShowExportResultModal(true);
+        return;
+      }
+
+      // Create workbook and worksheet
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Data Arsip");
+
+      // Define headers
+      const headers = [
+        "KODE UNIT",
+        "INDEKS",
+        "NOMOR BERKAS",
+        "JUDUL BERKAS",
+        "NOMOR ISI BERKAS",
+        "JENIS NASKAH DINAS",
+        "KLASIFIKASI",
+        "NOMOR SURAT",
+        "TANGGAL SURAT",
+        "PERIHAL",
+        "TINGKAT PERKEMBANGAN",
+        "KONDISI",
+        "LOKASI SIMPAN",
+        "RETENSI AKTIF",
+        "RETENSI INAKTIF",
+        "KETERANGAN",
+        "TAHUN RETENSI",
+        "STATUS",
+      ];
+
+      // Add header row
+      worksheet.addRow(headers);
+
+      // Add data rows
+      allArchives.forEach((archive: ArchiveData) => {
+        worksheet.addRow([
+          archive.kodeUnit || "",
+          archive.indeks || "",
+          archive.nomorBerkas || "",
+          archive.judulBerkas || "",
+          archive.nomorIsiBerkas || "",
+          archive.jenisNaskahDinas || "",
+          archive.klasifikasi || "",
+          archive.nomorSurat || "",
+          archive.tanggal
             ? new Date(archive.tanggal).toLocaleDateString("id-ID")
             : "",
-          "TINGKAT PERKEMBANGAN": archive.tingkatPerkembangan,
-          KONDISI: archive.kondisi,
-          "LOKASI SIMPAN": archive.lokasiSimpan,
-          "RETENSI AKTIF": archive.retensiAktif,
-          "RETENSI INAKTIF": archive.retensiInaktif,
-          KETERANGAN: archive.keterangan,
-          "RETENTION YEARS": archive.retentionYears,
-          STATUS: archive.status,
-        }))
-      );
+          archive.perihal || "",
+          archive.tingkatPerkembangan || "",
+          archive.kondisi || "",
+          archive.lokasiSimpan || "",
+          archive.retensiAktif || "",
+          archive.retensiInaktif || "",
+          archive.keterangan || "",
+          archive.retentionYears || "",
+          archive.status || "",
+        ]);
+      });
 
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Data Arsip");
+      // Style header row
+      const headerRow = worksheet.getRow(1);
+      headerRow.height = 25;
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFE8F4FD" }, // Light blue background
+        };
+        cell.font = {
+          name: "Arial",
+          size: 10,
+          bold: true,
+        };
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: "center",
+          wrapText: true,
+        };
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
 
+      // Style data rows
+      for (let i = 2; i <= worksheet.rowCount; i++) {
+        const row = worksheet.getRow(i);
+        row.height = 20;
+        row.eachCell((cell) => {
+          cell.font = {
+            name: "Arial",
+            size: 10,
+          };
+          cell.alignment = {
+            vertical: "middle",
+            horizontal: "center",
+            wrapText: true,
+          };
+          cell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          };
+        });
+      }
+
+      // Set column widths manually based on content
+      const columnWidths = [
+        15, 10, 15, 25, 18, 20, 15, 15, 15, 25, 20, 12, 15, 15, 15, 20, 15, 12,
+      ];
+
+      headers.forEach((header, index) => {
+        const column = worksheet.getColumn(index + 1);
+
+        // Calculate max width by checking all cells in this column
+        let maxWidth = header.length;
+
+        for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
+          const cell = worksheet.getCell(rowIndex, index + 1);
+          const cellValue = cell.value ? cell.value.toString() : "";
+          maxWidth = Math.max(maxWidth, cellValue.length);
+        }
+
+        // Set width with reasonable bounds
+        const finalWidth = Math.min(
+          Math.max(maxWidth + 2, columnWidths[index] || 15),
+          50
+        );
+        column.width = finalWidth;
+      });
+
+      // Generate filename
       let periodInfo = "";
       if (periodFilters.year) {
         periodInfo += `-${periodFilters.year}`;
@@ -353,11 +486,23 @@ export default function ArchiveManagement() {
           periodInfo += `-bulan${periodFilters.startMonth}to${periodFilters.endMonth}`;
         }
       }
-
       const fileName = `data-arsip${periodInfo}-${
         new Date().toISOString().split("T")[0]
       }.xlsx`;
-      XLSX.writeFile(workbook, fileName);
+
+      // Write file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
+      // Download file
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      window.URL.revokeObjectURL(url);
 
       setExportResult({ fileName, totalRows: allArchives.length });
       setShowExportResultModal(true);
