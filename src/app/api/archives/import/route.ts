@@ -3,6 +3,11 @@ import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { AUTH_COOKIE_NAME, verifyToken } from "@/utils/auth";
+import {
+  getClassificationRule,
+  validateRetentionYear,
+  RetentionMismatch,
+} from "@/utils/classificationRules";
 
 export async function POST(req: Request) {
   try {
@@ -24,10 +29,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const userId = payload.userId; // FIXED: Define userId variable here
+    const userId = payload.userId;
 
     const formData = await req.formData();
     const file = formData.get("file") as File;
+    const forceImport = formData.get("forceImport") === "true"; // Flag untuk bypass validasi retensi
 
     if (!file) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
@@ -64,9 +70,11 @@ export async function POST(req: Request) {
     let success = 0;
     let failed = 0;
     const errors: any[] = [];
+    const retentionMismatches: RetentionMismatch[] = [];
     const batchEntryDate = new Date();
     let totalRows = 0;
 
+    // First pass: Validate and collect mismatches
     for (const sheetName of sheetNames) {
       const sheet = workbook.Sheets[sheetName];
       if (!sheet) continue;
@@ -98,24 +106,125 @@ export async function POST(req: Request) {
 
       for (const [index, row] of rows.entries()) {
         try {
-          // VALIDASI BARU: Skip baris yang hanya berisi angka/nomor urut
+          // Skip baris yang hanya berisi angka/nomor urut
           const isNumberedRow = Object.values(row).every((value) => {
             if (value === null || value === undefined || value === "")
               return false;
-            // Cek jika value adalah angka atau string yang hanya berisi angka
             return !isNaN(Number(value)) && value.toString().trim() !== "";
           });
 
           if (isNumberedRow) {
-            console.log(
-              `Skipping numbered row in sheet ${sheetName}, row ${
-                index + headerRowIndex + 2
-              }`
-            );
-            continue; // Skip baris yang hanya berisi angka
+            continue;
           }
 
           // VALIDASI FLEKSIBEL: Terima NOMOR SURAT atau NOMOR NASKAH DINAS
+          const hasNomorSurat =
+            row["NOMOR SURAT"] && row["NOMOR SURAT"].toString().trim() !== "";
+          const hasNomorNaskahDinas =
+            row["NOMOR NASKAH DINAS"] &&
+            row["NOMOR NASKAH DINAS"].toString().trim() !== "";
+
+          if (
+            !row["KODE UNIT"] ||
+            (!hasNomorSurat && !hasNomorNaskahDinas) ||
+            !row["PERIHAL"]
+          ) {
+            continue; // Skip invalid rows in validation phase
+          }
+
+          const parseRetentionYears = (value: any): number => {
+            if (typeof value === "number") return value;
+            if (typeof value === "string") {
+              const parsed = parseInt(value);
+              return isNaN(parsed) ? 2 : parsed;
+            }
+            return 2;
+          };
+
+          const sanitizeString = (value: any): string | null => {
+            if (value === null || value === undefined || value === "")
+              return null;
+            const str = value.toString().trim();
+            return str === "" ? null : str;
+          };
+
+          const classification = sanitizeString(row["KLASIFIKASI"]);
+          const retentionYears = parseRetentionYears(row["RETENSI AKTIF"]);
+
+          // Check retention mismatch if classification exists
+          if (classification && !forceImport) {
+            const rule = getClassificationRule(classification);
+            if (
+              rule &&
+              !validateRetentionYear(classification, retentionYears)
+            ) {
+              retentionMismatches.push({
+                row: index + headerRowIndex + 2,
+                classification: classification,
+                currentRetention: retentionYears,
+                expectedRetention: rule.retentionYears,
+                ruleName: rule.name,
+              });
+            }
+          }
+        } catch (err) {
+          // Handle validation errors
+          continue;
+        }
+      }
+    }
+
+    // If there are retention mismatches and not forcing import, return them
+    if (retentionMismatches.length > 0 && !forceImport) {
+      return NextResponse.json(
+        {
+          hasRetentionMismatches: true,
+          retentionMismatches: retentionMismatches,
+          totalRows: totalRows,
+          message: "Ditemukan ketidaksesuaian masa retensi dengan klasifikasi",
+        },
+        { status: 422 }
+      );
+    }
+
+    // Second pass: Actually import the data
+    for (const sheetName of sheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      if (!sheet) continue;
+
+      const sheetData = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 });
+
+      const headerRowIndex = sheetData.findIndex((row) =>
+        row.some(
+          (cell) =>
+            typeof cell === "string" && cell.toUpperCase().includes("KODE UNIT")
+        )
+      );
+
+      if (headerRowIndex === -1) {
+        continue;
+      }
+
+      const rows = XLSX.utils.sheet_to_json(sheet, {
+        header: sheetData[headerRowIndex] as string[],
+        range: headerRowIndex + 1,
+        defval: "",
+      }) as any[];
+
+      for (const [index, row] of rows.entries()) {
+        try {
+          // Skip baris yang hanya berisi angka/nomor urut
+          const isNumberedRow = Object.values(row).every((value) => {
+            if (value === null || value === undefined || value === "")
+              return false;
+            return !isNaN(Number(value)) && value.toString().trim() !== "";
+          });
+
+          if (isNumberedRow) {
+            continue;
+          }
+
+          // VALIDASI FLEKSIBEL
           const hasNomorSurat =
             row["NOMOR SURAT"] && row["NOMOR SURAT"].toString().trim() !== "";
           const hasNomorNaskahDinas =
@@ -183,13 +292,23 @@ export async function POST(req: Request) {
             return 2;
           };
 
-          // FIXED: Add proper validation and sanitization for all fields
           const sanitizeString = (value: any): string | null => {
             if (value === null || value === undefined || value === "")
               return null;
             const str = value.toString().trim();
             return str === "" ? null : str;
           };
+
+          const classification = sanitizeString(row["KLASIFIKASI"]);
+          let retentionYears = parseRetentionYears(row["RETENTION YEARS"]);
+
+          // Auto-fix retention years if classification rule exists and forceImport is "fix"
+          if (classification && formData.get("autoFix") === "true") {
+            const rule = getClassificationRule(classification);
+            if (rule) {
+              retentionYears = rule.retentionYears;
+            }
+          }
 
           // Create the archive data with proper validation
           const archiveData = {
@@ -199,7 +318,7 @@ export async function POST(req: Request) {
             judulBerkas: sanitizeString(row["JUDUL BERKAS"]),
             nomorIsiBerkas: sanitizeString(row["NOMOR ISI BERKAS"]),
             jenisNaskahDinas: sanitizeString(row["JENIS NASKAH DINAS"]),
-            klasifikasi: sanitizeString(row["KLASIFIKASI"]),
+            klasifikasi: classification,
             nomorSurat:
               sanitizeString(row["NOMOR SURAT"]) ||
               sanitizeString(row["NOMOR NASKAH DINAS"]) ||
@@ -217,12 +336,12 @@ export async function POST(req: Request) {
             retensiAktif: sanitizeString(row["RETENSI AKTIF"]),
             keterangan: sanitizeString(row["KETERANGAN"]),
             entryDate: batchEntryDate,
-            retentionYears: parseRetentionYears(row["RETENTION YEARS"]),
+            retentionYears: retentionYears,
             status:
               row["STATUS"] && statusMap[row["STATUS"]?.toString()]
                 ? statusMap[row["STATUS"]?.toString()]
                 : "ACTIVE",
-            userId: userId, // FIXED: Add required userId field here
+            userId: userId,
           };
 
           // Additional validation for required fields
@@ -238,13 +357,6 @@ export async function POST(req: Request) {
             throw new Error("Perihal tidak boleh kosong");
           }
 
-          console.log(`Creating archive for row ${index + 1}:`, {
-            kodeUnit: archiveData.kodeUnit,
-            nomorSurat: archiveData.nomorSurat,
-            perihal: archiveData.perihal.substring(0, 50) + "...",
-            userId: userId,
-          });
-
           await prisma.archive.create({
             data: archiveData,
           });
@@ -252,10 +364,6 @@ export async function POST(req: Request) {
           success++;
         } catch (err: any) {
           failed++;
-          console.error(
-            `Error processing row ${index + headerRowIndex + 2}:`,
-            err
-          );
           errors.push({
             sheet: sheetName,
             row: index + headerRowIndex + 2,
@@ -275,6 +383,7 @@ export async function POST(req: Request) {
       successRows: success,
       failedRows: failed,
       errors: errors.slice(0, 10),
+      hasRetentionMismatches: false,
     });
   } catch (error: any) {
     console.error("Import API error:", error);

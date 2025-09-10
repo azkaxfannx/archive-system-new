@@ -26,6 +26,8 @@ import SuccessModal from "../ui/modal/SuccessModal";
 import ExportResultModal from "../ui/modal/ExportResultModal";
 import ImportResultModal from "../ui/modal/ImportResultModal";
 import DeleteConfirmationModal from "../ui/modal/DeleteConfirmationModal";
+import RetentionMismatchModal from "../ui/modal/RetentionMismatchModal";
+import PeminjamanErrorModal from "../ui/modal/PeminjamanErrorModal";
 
 interface BoxStats {
   kategori: string;
@@ -42,64 +44,6 @@ interface StatsData {
   boxStatsByCategory: BoxStats[];
 }
 
-// Error Modal Component for Peminjaman
-const PeminjamanErrorModal = ({
-  isOpen,
-  onClose,
-  message,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  message: string;
-}) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
-
-        <div className="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
-          <div className="sm:flex sm:items-start">
-            <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-              <svg
-                className="h-6 w-6 text-red-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L3.316 16.5c-.77.833.192 2.5 1.732 2.5z"
-                />
-              </svg>
-            </div>
-            <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">
-                Arsip Sedang Dipinjam
-              </h3>
-              <div className="mt-2">
-                <p className="text-sm text-gray-500">{message}</p>
-              </div>
-            </div>
-          </div>
-          <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 export default function ArchiveManagement() {
   const router = useRouter();
 
@@ -115,6 +59,12 @@ export default function ArchiveManagement() {
   const [showPeminjamanForm, setShowPeminjamanForm] = useState(false);
   const [user, setUser] = useState<any | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+
+  // NEW: State for retention mismatch handling
+  const [retentionMismatches, setRetentionMismatches] = useState<any[]>([]);
+  const [showRetentionMismatchModal, setShowRetentionMismatchModal] =
+    useState(false);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
 
   // FIXED: Use cookie-based authentication like in HomePage
   const checkAuthStatus = async () => {
@@ -532,18 +482,129 @@ export default function ArchiveManagement() {
     }
   };
 
+  // UPDATED: Enhanced import handler with retention mismatch handling
   const handleImport = async (file: File) => {
-    const result = await archiveAPI.importExcel(file);
-    setImportResult(result);
-    setShowImportResultModal(true);
-    mutate();
-    fetch("/api/archives/stats", {
-      credentials: "include", // FIXED: Add credentials
-    })
-      .then((res) => res.json())
-      .then((data) => setStats(data));
-    triggerHeaderRefresh();
-    setShowImportModal(false);
+    try {
+      setPendingImportFile(file);
+
+      // First attempt without forcing
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/archives/import", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      const result = await response.json();
+
+      // Check if there are retention mismatches
+      if (result.hasRetentionMismatches) {
+        setRetentionMismatches(result.retentionMismatches);
+        setShowRetentionMismatchModal(true);
+        setShowImportModal(false);
+        return;
+      }
+
+      // Normal import result
+      setImportResult(result);
+      setShowImportResultModal(true);
+      mutate();
+      fetch("/api/archives/stats", {
+        credentials: "include",
+      })
+        .then((res) => res.json())
+        .then((data) => setStats(data));
+      triggerHeaderRefresh();
+      setShowImportModal(false);
+    } catch (error) {
+      console.error("Import error:", error);
+      alert("Terjadi kesalahan saat mengimpor file!");
+    }
+  };
+
+  // NEW: Handle fix all retention mismatches
+  const handleFixAllRetention = async () => {
+    if (!pendingImportFile) return;
+
+    try {
+      setIsLoading(true);
+      const formData = new FormData();
+      formData.append("file", pendingImportFile);
+      formData.append("autoFix", "true");
+      formData.append("forceImport", "true");
+
+      const response = await fetch("/api/archives/import", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      const result = await response.json();
+
+      setImportResult({
+        ...result,
+        message:
+          "Import berhasil dengan masa retensi yang telah diperbaiki sesuai aturan klasifikasi",
+      });
+      setShowImportResultModal(true);
+      setShowRetentionMismatchModal(false);
+      mutate();
+      fetch("/api/archives/stats", {
+        credentials: "include",
+      })
+        .then((res) => res.json())
+        .then((data) => setStats(data));
+      triggerHeaderRefresh();
+    } catch (error) {
+      console.error("Fixed import error:", error);
+      alert("Terjadi kesalahan saat mengimpor dengan perbaikan otomatis!");
+    } finally {
+      setIsLoading(false);
+      setPendingImportFile(null);
+    }
+  };
+
+  // NEW: Handle continue anyway with retention mismatches
+  const handleContinueAnywayRetention = async () => {
+    if (!pendingImportFile) return;
+
+    try {
+      setIsLoading(true);
+      const formData = new FormData();
+      formData.append("file", pendingImportFile);
+      formData.append("forceImport", "true");
+
+      const response = await fetch("/api/archives/import", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      const result = await response.json();
+
+      setImportResult({
+        ...result,
+        message:
+          "Import berhasil dengan masa retensi dari file Excel (mungkin tidak sesuai aturan klasifikasi)",
+      });
+      setShowImportResultModal(true);
+      setShowRetentionMismatchModal(false);
+      mutate();
+      fetch("/api/archives/stats", {
+        credentials: "include",
+      })
+        .then((res) => res.json())
+        .then((data) => setStats(data));
+      triggerHeaderRefresh();
+    } catch (error) {
+      console.error("Force import error:", error);
+      alert("Terjadi kesalahan saat mengimpor!");
+    } finally {
+      setIsLoading(false);
+      setPendingImportFile(null);
+    }
   };
 
   const handleSaveArchive = async (formData: ArchiveFormData) => {
@@ -723,6 +784,20 @@ export default function ArchiveManagement() {
           onImport={handleImport}
         />
       )}
+
+      {/* NEW: Retention Mismatch Modal */}
+      <RetentionMismatchModal
+        isOpen={showRetentionMismatchModal}
+        onClose={() => {
+          setShowRetentionMismatchModal(false);
+          setPendingImportFile(null);
+          setRetentionMismatches([]);
+        }}
+        mismatches={retentionMismatches}
+        onFixAll={handleFixAllRetention}
+        onContinueAnyway={handleContinueAnywayRetention}
+        isLoading={isLoading}
+      />
 
       {/* Export Result Modal */}
       <ExportResultModal

@@ -156,6 +156,24 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
               <li>• Maksimal 1000 baris per upload</li>
             </ul>
           </div>
+
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <h4 className="font-medium text-yellow-900 mb-2">
+              Validasi Klasifikasi & Masa Retensi:
+            </h4>
+            <ul className="text-sm text-yellow-800 space-y-1">
+              <li>
+                • Sistem akan memvalidasi masa retensi berdasarkan klasifikasi
+              </li>
+              <li>• Contoh: KU (Kepegawaian) = 10 tahun</li>
+              <li>
+                • Jika tidak sesuai, akan muncul konfirmasi untuk perbaikan
+              </li>
+              <li>
+                • Anda dapat memilih perbaiki otomatis atau tetap lanjutkan
+              </li>
+            </ul>
+          </div>
         </div>
 
         <div className="flex justify-end space-x-2 p-6 border-t">
