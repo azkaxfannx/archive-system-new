@@ -42,6 +42,7 @@ interface StatsData {
   disposeCount: number;
   totalBoxCount: number;
   boxStatsByCategory: BoxStats[];
+  jenisNaskahDinasData: { jenis: string; total: number }[];
 }
 
 export default function ArchiveManagement() {
@@ -140,6 +141,7 @@ export default function ArchiveManagement() {
     disposeCount: 0,
     totalBoxCount: 0,
     boxStatsByCategory: [],
+    jenisNaskahDinasData: [],
   });
 
   useEffect(() => {
@@ -706,6 +708,9 @@ export default function ArchiveManagement() {
           disposeCount={stats.disposeCount}
           totalBoxCount={stats.totalBoxCount}
           boxStatsByCategory={stats.boxStatsByCategory}
+          jenisNaskahDinasData={stats.jenisNaskahDinasData}
+          onColumnFilter={handleColumnFilter}
+          columnFilters={columnFilters}
         />
 
         {/* Archive Table */}

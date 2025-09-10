@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useEffect, useState, RefObject } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import {
   Eye,
   Edit2,
@@ -76,6 +76,12 @@ const MONTHS = [
   { value: "12", label: "Desember" },
 ];
 
+const STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Aktif",
+  INACTIVE: "Inaktif",
+  DISPOSE_ELIGIBLE: "Siap Musnah",
+};
+
 export default function ArchiveTable({
   archives,
   loading,
@@ -87,7 +93,7 @@ export default function ArchiveTable({
   sortField,
   sortOrder,
   onColumnFilter,
-  columnFilters,
+  columnFilters = {},
   onAdd,
   onImport,
   onExport,
@@ -101,7 +107,7 @@ export default function ArchiveTable({
     Record<string, boolean>
   >({});
 
-  // Local filter state yang sama dengan PeminjamanTable
+  // Local filter state for remaining filters
   const [localFilters, setLocalFilters] = useState<Record<string, string>>({});
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -119,7 +125,6 @@ export default function ArchiveTable({
           return;
         }
 
-        // Check each archive for active peminjaman
         const promises = archiveIds.map(async (archiveId) => {
           const response = await fetch(
             `/api/peminjaman?archiveId=${archiveId}`
@@ -127,7 +132,6 @@ export default function ArchiveTable({
           const result = await response.json();
 
           if (result.success && result.data) {
-            // Check if there's any active peminjaman (tanggalPengembalian is null)
             const hasActivePeminjaman = result.data.some(
               (p: any) => p.tanggalPengembalian === null
             );
@@ -168,7 +172,6 @@ export default function ArchiveTable({
     );
   };
 
-  // Handler yang sama dengan PeminjamanTable - dengan debounce 300ms
   const handleInputChange = (column: string, value: string) => {
     setLocalFilters((prev) => ({ ...prev, [column]: value }));
 
@@ -181,7 +184,6 @@ export default function ArchiveTable({
     }, 300);
   };
 
-  // Generate years for dropdown (current year ± 10 years)
   const generateYears = () => {
     const currentYear = new Date().getFullYear();
     const years = [];
@@ -191,11 +193,9 @@ export default function ArchiveTable({
     return years;
   };
 
-  // Check if period filters are active
   const hasPeriodFilters =
     periodFilters.year || periodFilters.startMonth || periodFilters.endMonth;
 
-  // Get period filter display text
   const getPeriodFilterText = () => {
     if (!hasPeriodFilters) return "";
 
@@ -224,19 +224,15 @@ export default function ArchiveTable({
     return text;
   };
 
-  // Clear period filters
   const clearPeriodFilters = () => {
     onPeriodFilterChange("year", "");
     onPeriodFilterChange("startMonth", "");
     onPeriodFilterChange("endMonth", "");
   };
 
-  // Simple alternating row colors
-  const getRowColorClass = (index: number) => {
-    return index % 2 === 0 ? "bg-white" : "bg-gray-50";
-  };
+  const getRowColorClass = (index: number) =>
+    index % 2 === 0 ? "bg-white" : "bg-gray-50";
 
-  // Helper function to format date safely
   const formatDocumentDate = (dateString: string | null | undefined) => {
     if (!dateString) return "-";
     try {
@@ -250,14 +246,11 @@ export default function ArchiveTable({
     }
   };
 
-  // Helper function to check if archive can be borrowed
-  const canBorrow = (archiveId: string) => {
-    return !activePeminjaman[archiveId];
-  };
+  const canBorrow = (archiveId: string) => !activePeminjaman[archiveId];
 
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
-      {/* Period Filters Banner */}
+      {/* Banner Periode */}
       {hasPeriodFilters && (
         <div className="px-6 py-2 bg-blue-50 border-b border-blue-200 flex justify-between items-center">
           <div className="flex items-center space-x-2">
@@ -269,6 +262,39 @@ export default function ArchiveTable({
           <button
             onClick={clearPeriodFilters}
             className="text-xs text-blue-600 hover:text-blue-800 underline"
+          >
+            Hapus Filter
+          </button>
+        </div>
+      )}
+
+      {/* Banner Filter dari StatsCards */}
+      {(columnFilters.status ||
+        columnFilters.jenisNaskahDinas ||
+        columnFilters.lokasiSimpan) && (
+        <div className="px-6 py-2 bg-green-50 border-b border-green-200 flex justify-between items-center">
+          <span className="text-sm text-green-800">
+            Filter aktif:{" "}
+            {[
+              columnFilters.status &&
+                `Status = ${
+                  STATUS_LABELS[columnFilters.status] || columnFilters.status
+                }`,
+              columnFilters.jenisNaskahDinas &&
+                `Jenis = ${columnFilters.jenisNaskahDinas}`,
+              columnFilters.lokasiSimpan &&
+                `Kategori = ${columnFilters.lokasiSimpan.replace(/\.$/, "")}`,
+            ]
+              .filter(Boolean)
+              .join(" | ")}
+          </span>
+          <button
+            onClick={() => {
+              onColumnFilter("status", "");
+              onColumnFilter("jenisNaskahDinas", "");
+              onColumnFilter("lokasiSimpan", "");
+            }}
+            className="text-xs text-red-600 hover:text-red-800 underline"
           >
             Hapus Filter
           </button>
@@ -287,7 +313,7 @@ export default function ArchiveTable({
             onClick={onExport}
             className="px-3 py-1.5 text-sm rounded bg-yellow-600 text-white hover:bg-yellow-700 transition-colors"
           >
-            Export Excel
+            Download Excel
           </button>
 
           {/* Tombol Import */}
@@ -295,7 +321,7 @@ export default function ArchiveTable({
             onClick={onImport}
             className="px-3 py-1.5 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
           >
-            Import Excel
+            Upload Excel
           </button>
 
           {/* Tombol Tambah */}

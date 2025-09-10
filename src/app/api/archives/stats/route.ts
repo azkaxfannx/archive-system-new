@@ -39,6 +39,19 @@ export async function GET() {
     where: { ...baseWhere, status: "DISPOSE_ELIGIBLE" },
   });
 
+  // Hitung distribusi jenisNaskahDinas
+  const jenisStats = await prisma.archive.groupBy({
+    by: ["jenisNaskahDinas"],
+    _count: { jenisNaskahDinas: true },
+    where: baseWhere,
+  });
+
+  // Format response
+  const jenisNaskahDinasData = jenisStats.map((j) => ({
+    jenis: j.jenisNaskahDinas || "Lainnya",
+    total: j._count.jenisNaskahDinas,
+  }));
+
   // Hitung total box berdasarkan klasifikasi
   const archivesWithLokasiSimpan = await prisma.archive.findMany({
     where: {
@@ -103,5 +116,7 @@ export async function GET() {
     // Stats box
     totalBoxCount,
     boxStatsByCategory,
+
+    jenisNaskahDinasData,
   });
 }
