@@ -40,22 +40,22 @@ export async function GET() {
   });
 
   // Hitung total box berdasarkan klasifikasi
-  const archivesWithKlasifikasi = await prisma.archive.findMany({
+  const archivesWithLokasiSimpan = await prisma.archive.findMany({
     where: {
       ...baseWhere,
-      klasifikasi: {
+      lokasiSimpan: {
         not: null,
       },
     },
     select: {
-      klasifikasi: true,
+      lokasiSimpan: true,
     },
   });
 
   // Parse klasifikasi dan hitung box per kategori
-  const boxStats = archivesWithKlasifikasi.reduce((acc, archive) => {
-    if (archive.klasifikasi) {
-      const parts = archive.klasifikasi.split(".");
+  const boxStats = archivesWithLokasiSimpan.reduce((acc, archive) => {
+    if (archive.lokasiSimpan) {
+      const parts = archive.lokasiSimpan.split(".");
 
       // Pastikan format sesuai (minimal 4 bagian: KATEGORI.RAK.BARIS.BOX)
       if (parts.length >= 4) {
