@@ -10,7 +10,7 @@ async function canAccessArchive(
   id: string,
   user?: { userId: string; role: "ADMIN" | "USER" }
 ) {
-  if (!user) return false; // kalau gak ada user, pasti gak boleh
+  if (!user) return false;
   if (user.role === "ADMIN") return true;
 
   const arch = await prisma.archive.findUnique({
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const { user, error } = requireAuth(req);
     if (error) return error;
 
-    const { id } = await params; // Await the params Promise
+    const { id } = await params;
 
     if (!(await canAccessArchive(id, user))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -66,7 +66,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     const { user, error } = requireAuth(req);
     if (error) return error;
 
-    const { id } = await params; // Await the params Promise
+    const { id } = await params;
 
     if (!(await canAccessArchive(id, user))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

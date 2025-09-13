@@ -1,0 +1,37 @@
+name: Deploy Next.js App (Windows + Prisma)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      # 1. Checkout repo
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. Install dependencies dengan pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 3. Prisma generate
+      - name: Prisma generate
+        run: pnpm prisma generate
+
+      # 4. Prisma db push (atau migrate deploy kalau sudah siap production)
+      - name: Prisma db push
+        run: pnpm prisma db push
+
+      # 5. Build Next.js
+      - name: Build project
+        run: pnpm build
+
+      # 6. Restart app pakai PM2
+      - name: Restart app with PM2
+        run: |
+          pm2 stop archive-system || echo "App not running"
+          pm2 start pnpm --name archive-system -- start
