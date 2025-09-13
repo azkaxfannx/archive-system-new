@@ -19,14 +19,12 @@ jobs:
           git pull origin main
 
       - name: Stop PM2 app (if running)
-        shell: cmd
         run: |
-          pm2 list | findstr archive-system-new >nul 2>&1
-          if %errorlevel% equ 0 (
+          if (pm2 list | Select-String "archive-system-new") {
             pm2 stop archive-system-new
-          ) else (
-            echo App not running
-          )
+          } else {
+            Write-Output "App not running"
+          }
 
       - name: Install dependencies
         run: pnpm install
