@@ -2,8 +2,8 @@ module.exports = {
   apps: [
     {
       name: "archive-system-new",
-      script: "pnpm.cmd", // 👈 ganti ke pnpm.cmd
-      args: "start",
+      script: "cmd",
+      args: "/c pnpm start",
       interpreter: "none",
       cwd: __dirname,
       env: {
