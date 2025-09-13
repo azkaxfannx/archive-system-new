@@ -1,11 +1,11 @@
 module.exports = {
   apps: [
     {
-      name: "archive-system-new", // nama app di PM2
-      script: "pnpm", // jalankan perintah "pnpm"
-      args: "start", // dengan argumen "start"
-      interpreter: "none", // jangan pakai node interpreter
-      cwd: __dirname, // path kerja = folder project ini
+      name: "archive-system-new",
+      script: "pnpm.cmd", // 👈 ganti ke pnpm.cmd
+      args: "start",
+      interpreter: "none",
+      cwd: __dirname,
       env: {
         NODE_ENV: "production",
       },
