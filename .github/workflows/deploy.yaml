@@ -40,5 +40,5 @@ jobs:
           cd C:/Users/backup/Documents/test5
           npx pm2 restart test5
           if ($LASTEXITCODE -ne 0) {
-            npx pm2 start pnpm --name test5 -- start
+            npx pm2 start pnpm --name archive-system-new -- start
           }
