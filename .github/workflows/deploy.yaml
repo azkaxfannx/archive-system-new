@@ -38,4 +38,7 @@ jobs:
       - name: Restart App (PM2)
         run: |
           cd C:/Users/backup/Documents/test5/archive-system-new
-          pm2 restart test5 || pm2 start pnpm --name test5 -- start
+          pm2 restart test5 
+          if ($LASTEXITCODE -ne 0) {
+          pm2 start pnpm --name test5 -- start
+          }
