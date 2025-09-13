@@ -38,7 +38,7 @@ jobs:
       - name: Restart App (PM2)
         run: |
           cd C:/Users/backup/Documents/test5/archive-system-new
-          npx pm2 restart test5
+          npx pm2 restart archive-system-new
           if ($LASTEXITCODE -ne 0) {
             npx pm2 start pnpm --name archive-system-new -- run start
           }
