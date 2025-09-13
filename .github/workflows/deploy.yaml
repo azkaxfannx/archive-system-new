@@ -20,7 +20,7 @@ jobs:
 
       - name: Stop PM2 app (if running)
         run: |
-          pm2 stop archive-system-new || echo "App not running"
+          pm2 stop archive-system-new
 
       - name: Install dependencies
         run: pnpm install
