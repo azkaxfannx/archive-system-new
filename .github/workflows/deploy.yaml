@@ -8,35 +8,31 @@ on:
 jobs:
   deploy:
     runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: C:/Users/backup/Documents/test5/archive-system-new
+
     steps:
       - name: Pull latest code
         run: |
-          cd C:/Users/backup/Documents/test5/archive-system-new
           git reset --hard
           git pull origin main
 
-      - name: Install dependencies
+      - name: Stop PM2 app (if running)
         run: |
-          cd C:/Users/backup/Documents/test5/archive-system-new
-          pnpm install
+          pm2 stop archive-system-new || echo "App not running"
+
+      - name: Install dependencies
+        run: pnpm install
 
       - name: Generate Prisma Client
-        run: |
-          cd C:/Users/backup/Documents/test5/archive-system-new
-          pnpm prisma generate
+        run: pnpm prisma generate
 
       - name: Push Prisma schema
-        run: |
-          cd C:/Users/backup/Documents/test5/archive-system-new
-          pnpm prisma db push
+        run: pnpm prisma db push
 
       - name: Build Next.js App
-        run: |
-          cd C:/Users/backup/Documents/test5/archive-system-new
-          pnpm build
+        run: pnpm build
 
       - name: Restart App (PM2)
-        run: |
-          cd C:/Users/backup/Documents/test5/archive-system-new
-          npx pm2 startOrReload ecosystem.config.js
-          npx pm2 restart archive-system-new --update-env
+        run: pm2 reload ecosystem.config.js --env production
