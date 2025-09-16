@@ -15,9 +15,8 @@ jobs:
     steps:
       - name: Stop existing PM2 processes first
         run: |
-          pm2 kill  # Kill all PM2 processes
+          pm2 kill
           Start-Sleep -Seconds 3
-          # Kill any hanging processes on port 3000
           Get-Process | Where-Object {$_.ProcessName -like "*node*"} | Stop-Process -Force -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 2
 
