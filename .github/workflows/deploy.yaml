@@ -43,3 +43,10 @@ jobs:
 
       - name: Save PM2 processes
         run: pm2 save
+
+      - name: Check if app is running
+        run: |
+          Start-Sleep -Seconds 5
+          pm2 status
+          netstat -ano | findstr :3000
+          Test-NetConnection localhost -Port 3000
