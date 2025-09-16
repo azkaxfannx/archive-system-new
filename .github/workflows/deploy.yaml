@@ -13,6 +13,11 @@ jobs:
         working-directory: C:/Users/backup/Documents/test5/archive-system-new
 
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          path: C:/Users/backup/Documents/test5/archive-system-new
+
       - name: Pull latest code
         run: |
           git reset --hard
