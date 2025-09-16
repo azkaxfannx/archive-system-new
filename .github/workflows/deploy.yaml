@@ -46,13 +46,13 @@ jobs:
           }
 
       - name: Restart App (PM2)
-        run: pm2 startOrReload ecosystem.config.js --update-env
-        env:
-          NODE_ENV: production
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          JWT_EXPIRES: ${{ secrets.JWT_EXPIRES }}
-          AUTH_COOKIE_NAME: ${{ secrets.AUTH_COOKIE_NAME }}
+        run: |
+          $env:NODE_ENV="production"
+          $env:DATABASE_URL="${{ secrets.DATABASE_URL }}"
+          $env:JWT_SECRET="${{ secrets.JWT_SECRET }}"
+          $env:JWT_EXPIRES="${{ secrets.JWT_EXPIRES }}"
+          $env:AUTH_COOKIE_NAME="${{ secrets.AUTH_COOKIE_NAME }}"
+          pm2 startOrReload ecosystem.config.js --update-env
 
       - name: Save PM2 processes
         run: pm2 save
