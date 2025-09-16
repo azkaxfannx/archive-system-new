@@ -18,7 +18,7 @@ jobs:
 
       - name: Add npm global bin to PATH
         run: echo "C:\Users\backup\AppData\Roaming\npm" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-        shell: pwsh
+        shell: powershell
 
       - name: Stop PM2 app (if running)
         run: |
