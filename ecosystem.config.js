@@ -2,12 +2,15 @@ module.exports = {
   apps: [
     {
       name: "archive-system-new",
-      script: "start.js",
+      script: "./node_modules/next/dist/bin/next",
+      args: "start -p 3000",
       cwd: __dirname,
       exec_mode: "fork",
       instances: 1,
       autorestart: true,
       watch: false,
+      kill_timeout: 5000, // Wait 5s for graceful shutdown
+      shutdown_with_message: true,
       env: {
         NODE_ENV: "production",
         DATABASE_URL: process.env.DATABASE_URL,

@@ -13,16 +13,16 @@ jobs:
         working-directory: C:\actions-runner\_work\archive-system-new\archive-system-new
 
     steps:
+      - name: Stop existing PM2 processes first
+        run: |
+          pm2 kill  # Kill all PM2 processes
+          Start-Sleep -Seconds 3
+          # Kill any hanging processes on port 3000
+          Get-Process | Where-Object {$_.ProcessName -like "*node*"} | Stop-Process -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+
       - name: Checkout repo
         uses: actions/checkout@v4
-
-      - name: Stop PM2 app (if running)
-        run: |
-          if (pm2 list | Select-String "archive-system-new") {
-            pm2 stop archive-system-new
-          } else {
-            Write-Output "App not running"
-          }
 
       - name: Install dependencies
         run: pnpm install
