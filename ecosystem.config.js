@@ -10,6 +10,10 @@ module.exports = {
       watch: false,
       env: {
         NODE_ENV: "production",
+        DATABASE_URL: process.env.DATABASE_URL,
+        JWT_SECRET: process.env.JWT_SECRET,
+        JWT_EXPIRES: process.env.JWT_EXPIRES,
+        AUTH_COOKIE_NAME: process.env.AUTH_COOKIE_NAME,
       },
     },
   ],
