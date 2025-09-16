@@ -45,14 +45,19 @@ jobs:
             exit 1
           }
 
-      - name: Restart App (PM2)
+      - name: Delete old PM2 process
+        run: |
+          pm2 delete archive-system-new
+        continue-on-error: true
+
+      - name: Start fresh PM2 process
         run: |
           $env:NODE_ENV="production"
           $env:DATABASE_URL="${{ secrets.DATABASE_URL }}"
           $env:JWT_SECRET="${{ secrets.JWT_SECRET }}"
           $env:JWT_EXPIRES="${{ secrets.JWT_EXPIRES }}"
           $env:AUTH_COOKIE_NAME="${{ secrets.AUTH_COOKIE_NAME }}"
-          pm2 startOrReload ecosystem.config.js --update-env
+          pm2 start ecosystem.config.js --update-env
 
       - name: Debug PM2 status and logs
         run: |
