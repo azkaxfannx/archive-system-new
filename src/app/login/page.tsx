@@ -75,7 +75,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-6">
       <div className="bg-white rounded-2xl shadow-lg w-full max-w-md p-8 space-y-6">
-        <h1 className="text-2xl font-bold text-center">Masuk NJIRRR</h1>
+        <h1 className="text-2xl font-bold text-center">Masuk</h1>
         <form onSubmit={onSubmit} className="space-y-4">
           <input
             className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
