@@ -54,6 +54,22 @@ jobs:
           $env:AUTH_COOKIE_NAME="${{ secrets.AUTH_COOKIE_NAME }}"
           pm2 startOrReload ecosystem.config.js --update-env
 
+      - name: Debug PM2 status and logs
+        run: |
+          Write-Output "=== PM2 Status ==="
+          pm2 status
+          Write-Output "=== PM2 Describe ==="
+          pm2 describe archive-system-new
+          Write-Output "=== PM2 Logs (last 30 lines) ==="
+          pm2 logs archive-system-new --lines 30 --nostream
+          Write-Output "=== Environment Check ==="
+          node -v
+          Get-Location
+          Test-Path ".next"
+          Write-Output "=== Manual Test ==="
+          node .\node_modules\next\dist\bin\next --version
+        continue-on-error: true
+
       - name: Save PM2 processes
         run: pm2 save
 
