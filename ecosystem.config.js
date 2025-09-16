@@ -3,7 +3,7 @@ module.exports = {
     {
       name: "archive-system-new",
       script: "pnpm",
-      args: "start -- -H 0.0.0.0 -p 3000",
+      args: "start",
       cwd: __dirname,
       instances: 1,
       autorestart: true,
