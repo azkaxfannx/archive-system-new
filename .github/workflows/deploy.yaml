@@ -13,43 +13,6 @@ jobs:
         working-directory: C:\actions-runner\_work\archive-system-new\archive-system-new
 
     steps:
-      - name: Stop and cleanup PM2 processes
-        run: |
-          # Stop specific app first
-          if (pm2 list | Select-String "archive-system-new") {
-            Write-Output "Stopping archive-system-new..."
-            pm2 stop archive-system-new
-            Start-Sleep -Seconds 3
-            pm2 delete archive-system-new
-            Start-Sleep -Seconds 2
-          }
-
-          # Kill any remaining processes on port 3000
-          $processes = netstat -ano | findstr :3000
-          if ($processes) {
-            Write-Output "Found processes on port 3000, terminating..."
-            $processes | ForEach-Object {
-              $pid = ($_ -split '\s+')[-1]
-              if ($pid -and $pid -ne "0") {
-                try {
-                  Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-                  Write-Output "Killed process $pid"
-                } catch {
-                  Write-Output "Could not kill process $pid"
-                }
-              }
-            }
-            Start-Sleep -Seconds 2
-          }
-
-          # Verify port is free
-          $check = Test-NetConnection localhost -Port 3000 -WarningAction SilentlyContinue
-          if ($check.TcpTestSucceeded) {
-            Write-Warning "Port 3000 still occupied after cleanup"
-          } else {
-            Write-Output "Port 3000 is now free"
-          }
-
       - name: Checkout repo
         uses: actions/checkout@v4
 

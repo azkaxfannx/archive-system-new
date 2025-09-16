@@ -9,7 +9,7 @@ module.exports = {
       instances: 1,
       autorestart: true,
       watch: false,
-      kill_timeout: 5000, // Wait 5s for graceful shutdown
+      // kill_timeout: 5000, // Wait 5s for graceful shutdown
       shutdown_with_message: true,
       env: {
         NODE_ENV: "production",
