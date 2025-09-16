@@ -32,6 +32,8 @@ jobs:
 
       - name: Push Prisma schema
         run: pnpm prisma db push
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Build Next.js App
         run: pnpm build
