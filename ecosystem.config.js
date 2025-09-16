@@ -2,8 +2,8 @@ module.exports = {
   apps: [
     {
       name: "archive-system-new",
-      script: "./node_modules/.bin/next",
-      args: "start -p 3000",
+      script: "npm",
+      args: "start",
       cwd: __dirname,
       exec_mode: "fork",
       instances: 1,
