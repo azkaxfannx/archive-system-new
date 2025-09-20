@@ -3,9 +3,8 @@ module.exports = {
     {
       name: "archive-system-new",
       cwd: __dirname,
-      script: "pnpm",
-      args: "start -p 3000 -H 0.0.0.0",
-      interpreter: "powershell.exe",
+      script: "node",
+      args: "node_modules/next/dist/bin/next start -H 0.0.0.0 -p 3000",
       env: {
         NODE_ENV: "production",
         DATABASE_URL: process.env.DATABASE_URL,
