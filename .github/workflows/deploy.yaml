@@ -47,12 +47,13 @@ jobs:
 
       - name: Delete old PM2 process if exists
         run: |
-          if pm2 describe archive-system-new >nul 2>&1; then
-            echo "Process archive-system-new found, deleting..."
+          if (pm2 describe archive-system-new | Out-String | Select-String "status") {
+            Write-Output "Process archive-system-new found, deleting..."
             pm2 delete archive-system-new
-          else
-            echo "No existing PM2 process named archive-system-new"
-          fi
+          } else {
+            Write-Output "No existing PM2 process named archive-system-new"
+          }
+        shell: pwsh
 
       - name: Start fresh PM2 process
         run: |
