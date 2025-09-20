@@ -22,7 +22,7 @@ console.log("Next binary:", nextBin);
 console.log("Working directory:", __dirname);
 
 // Start the Next.js application
-const child = spawn("node", [nextBin, "start", "-p", "3000"], {
+const child = spawn("node", [nextBin, "start", "-H", "0.0.0.0", "-p", "3000"], {
   stdio: "inherit",
   env: process.env,
   cwd: __dirname,
