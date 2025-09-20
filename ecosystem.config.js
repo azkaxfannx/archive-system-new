@@ -3,8 +3,8 @@ module.exports = {
     {
       name: "archive-system-new",
       cwd: __dirname,
-      script: "node",
-      args: "node_modules/next/dist/bin/next start -H 0.0.0.0 -p 3000",
+      script: "pnpm.cmd",
+      args: "start -- -H 0.0.0.0 -p 3000",
       interpreter: "none",
       autorestart: true,
       watch: false,
