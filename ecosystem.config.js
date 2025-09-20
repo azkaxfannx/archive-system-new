@@ -6,6 +6,8 @@ module.exports = {
       script: "pnpm.cmd",
       args: "start -H 0.0.0.0 -p 3000",
       interpreter: "none",
+      autorestart: true,
+      watch: false,
       env: {
         NODE_ENV: "production",
         DATABASE_URL: process.env.DATABASE_URL,
