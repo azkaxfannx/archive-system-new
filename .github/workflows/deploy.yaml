@@ -45,16 +45,6 @@ jobs:
             exit 1
           }
 
-      - name: Delete old PM2 process if exists
-        run: |
-          if (pm2 describe archive-system-new | Out-String | Select-String "status") {
-            Write-Output "Process archive-system-new found, deleting..."
-            pm2 delete archive-system-new
-          } else {
-            Write-Output "No existing PM2 process named archive-system-new"
-          }
-        shell: powershell
-
       - name: Start fresh PM2 process
         run: |
           $env:NODE_ENV="production"
