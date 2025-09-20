@@ -53,7 +53,7 @@ jobs:
           } else {
             Write-Output "No existing PM2 process named archive-system-new"
           }
-        shell: pwsh
+        shell: powershell
 
       - name: Start fresh PM2 process
         run: |
