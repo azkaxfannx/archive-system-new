@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
-    "start": "next start -H 0.0.0.0 -p 3000",
+    "start": "next start -H 0.0.0.0 -p 3002",
     "tw:init": "tailwindcss init -p"
   },
   "dependencies": {
