@@ -22,7 +22,7 @@ export async function GET() {
   }
 
   const userId = payload.userId;
-  const role = payload.role; // pastikan token menyimpan role juga
+  const role = payload.role;
 
   // Kalau ADMIN → tidak ada filter ({}), kalau USER → filter berdasarkan userId
   const baseWhere = role === "ADMIN" ? {} : { userId };
@@ -52,58 +52,91 @@ export async function GET() {
     total: j._count.jenisNaskahDinas,
   }));
 
-  // Hitung total box berdasarkan klasifikasi
-  const archivesWithLokasiSimpan = await prisma.archive.findMany({
+  // Ambil semua arsip dengan nomorBerkas untuk menghitung box
+  const archivesWithNomorBerkas = await prisma.archive.findMany({
     where: {
       ...baseWhere,
-      lokasiSimpan: {
+      nomorBerkas: {
         not: null,
       },
     },
     select: {
-      lokasiSimpan: true,
+      nomorBerkas: true,
     },
   });
 
-  // Parse klasifikasi dan hitung box per kategori
-  const boxStats = archivesWithLokasiSimpan.reduce((acc, archive) => {
-    if (archive.lokasiSimpan) {
-      const parts = archive.lokasiSimpan.split(".");
+  // Parse nomorBerkas dan hitung box per kategori (dari prefix nomorBerkas)
+  const boxStats = archivesWithNomorBerkas.reduce((acc, archive) => {
+    if (archive.nomorBerkas) {
+      const nomorBerkas = archive.nomorBerkas.trim();
 
-      // Pastikan format sesuai (minimal 4 bagian: KATEGORI.RAK.BARIS.BOX)
-      if (parts.length >= 4) {
-        const kategori = parts[0]; // HM, KS, TEK, dll
-        const boxNum = parseInt(parts[3]); // nomor box
+      let kategori = "UMUM";
+      let boxNum: number | null = null;
 
-        if (!isNaN(boxNum)) {
-          if (!acc[kategori]) {
-            acc[kategori] = {
-              maxBox: 0,
-              totalArchives: 0,
-            };
-          }
+      // Cek jika nomorBerkas adalah angka langsung (1, 2, 3, dll)
+      if (/^\d+$/.test(nomorBerkas)) {
+        boxNum = parseInt(nomorBerkas);
+      }
+      // Cek format dengan titik (PKPJ.3.3.9)
+      else if (nomorBerkas.includes(".")) {
+        const parts = nomorBerkas.split(".");
 
-          acc[kategori].maxBox = Math.max(acc[kategori].maxBox, boxNum);
-          acc[kategori].totalArchives += 1;
+        // Ambil bagian PERTAMA sebagai kategori (PKPJ, HM, KS, dll)
+        kategori = parts[0];
+
+        // Ambil bagian terakhir sebagai nomor box
+        const lastPart = parts[parts.length - 1];
+        boxNum = parseInt(lastPart);
+
+        // Jika bagian terakhir bukan angka, coba bagian sebelumnya
+        if (isNaN(boxNum) && parts.length >= 2) {
+          const secondLastPart = parts[parts.length - 2];
+          boxNum = parseInt(secondLastPart);
         }
+      }
+
+      // Jika berhasil mendapatkan nomor box yang valid
+      if (boxNum && !isNaN(boxNum) && boxNum > 0) {
+        if (!acc[kategori]) {
+          acc[kategori] = new Set<number>();
+        }
+
+        // Tambahkan nomor box ke Set (unik)
+        acc[kategori].add(boxNum);
       }
     }
     return acc;
-  }, {} as Record<string, { maxBox: number; totalArchives: number }>);
+  }, {} as Record<string, Set<number>>);
 
-  // Hitung total box keseluruhan
-  const totalBoxCount = Object.values(boxStats).reduce(
-    (sum, stat) => sum + stat.maxBox,
-    0
-  );
-
-  // Format response untuk box stats
+  // Hitung total box keseluruhan dan format response
+  let totalBoxCount = 0;
   const boxStatsByCategory = Object.entries(boxStats).map(
-    ([kategori, data]) => ({
-      kategori,
-      totalBox: data.maxBox,
-      totalArchives: data.totalArchives,
-    })
+    ([kategori, boxNumbers]) => {
+      const uniqueBoxes = Array.from(boxNumbers);
+      const totalBox = uniqueBoxes.length;
+      totalBoxCount += totalBox;
+
+      // Hitung total arsip untuk kategori ini
+      const totalArchives = archivesWithNomorBerkas.filter((archive) => {
+        if (!archive.nomorBerkas) return false;
+
+        const nomorBerkas = archive.nomorBerkas.trim();
+        let archiveKategori = "UMUM";
+
+        if (nomorBerkas.includes(".")) {
+          const parts = nomorBerkas.split(".");
+          archiveKategori = parts[0];
+        }
+
+        return archiveKategori === kategori;
+      }).length;
+
+      return {
+        kategori,
+        totalBox,
+        totalArchives,
+      };
+    }
   );
 
   return NextResponse.json({

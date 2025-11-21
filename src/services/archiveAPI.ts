@@ -1,3 +1,4 @@
+// services/archiveAPI.ts - Updated version
 import {
   ArchiveRecord,
   ArchiveFormData,
@@ -6,9 +7,13 @@ import {
   ImportResult,
   PeminjamanFormData,
   PeminjamanRecord,
+  SerahTerimaFormData,
+  SerahTerimaRecord,
 } from "@/types/archive";
 
 export const archiveAPI = {
+  // ========== ARCHIVE METHODS ==========
+
   // Get archives with filters
   async getArchives(params: ArchiveParams = {}): Promise<ArchiveResponse> {
     const searchParams = new URLSearchParams();
@@ -186,5 +191,123 @@ export const archiveAPI = {
 
     if (!res.ok) throw new Error("Failed to delete peminjaman");
     return res.json();
+  },
+
+  // ========== SERAH TERIMA METHODS ==========
+
+  // Create serah terima
+  async createSerahTerima(
+    data: SerahTerimaFormData
+  ): Promise<SerahTerimaRecord> {
+    const res = await fetch("/api/serah-terima", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error || "Failed to create serah terima");
+    }
+
+    return res.json();
+  },
+
+  // Get all serah terima
+  async getAllSerahTerima(): Promise<SerahTerimaRecord[]> {
+    const res = await fetch("/api/serah-terima", { credentials: "include" });
+    if (!res.ok) throw new Error("Failed to fetch serah terima");
+    const json = await res.json();
+    return Array.isArray(json) ? json : json.data || [];
+  },
+
+  // Get serah terima with filters
+  async getSerahTerima(
+    params: Record<string, string | number> = {}
+  ): Promise<any> {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        searchParams.append(key, String(value));
+      }
+    });
+    const res = await fetch(`/api/serah-terima?${searchParams}`, {
+      credentials: "include",
+    });
+    if (!res.ok) throw new Error("Failed to fetch serah terima");
+    return res.json();
+  },
+
+  // Update serah terima
+  async updateSerahTerima(
+    id: string,
+    data: Partial<SerahTerimaFormData>
+  ): Promise<SerahTerimaRecord> {
+    const res = await fetch(`/api/serah-terima/${id}`, {
+      method: "PUT",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) throw new Error("Failed to update serah terima");
+    return res.json();
+  },
+
+  // Delete serah terima
+  async deleteSerahTerima(id: string): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/serah-terima/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+
+    if (!res.ok) throw new Error("Failed to delete serah terima");
+    return res.json();
+  },
+
+  // Check if archive can be handed over (tidak sedang dipinjam)
+  async checkArchiveAvailability(
+    archiveId: string
+  ): Promise<{ available: boolean; reason?: string }> {
+    try {
+      const res = await fetch(
+        `/api/serah-terima/check-availability/${archiveId}`,
+        {
+          credentials: "include",
+        }
+      );
+
+      if (!res.ok) {
+        // Jika endpoint tidak tersedia atau error, return default response
+        if (res.status === 404) {
+          console.warn(
+            "Availability check endpoint not found, assuming available"
+          );
+          return {
+            available: true,
+            reason: "Endpoint tidak tersedia, asumsikan tersedia",
+          };
+        }
+
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(
+          errorData.reason || `HTTP error! status: ${res.status}`
+        );
+      }
+
+      return res.json();
+    } catch (error) {
+      console.error("Availability check failed:", error);
+      // Fallback: assume archive is available to prevent blocking the feature
+      return {
+        available: true,
+        reason: "Pemeriksaan ketersediaan gagal, asumsikan arsip tersedia",
+      };
+    }
   },
 };

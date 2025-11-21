@@ -28,6 +28,8 @@ import ImportResultModal from "../ui/modal/ImportResultModal";
 import DeleteConfirmationModal from "../ui/modal/DeleteConfirmationModal";
 import RetentionMismatchModal from "../ui/modal/RetentionMismatchModal";
 import PeminjamanErrorModal from "../ui/modal/PeminjamanErrorModal";
+import SerahTerimaForm from "@/components/serah-terima/SerahTerimaForm";
+import { SerahTerimaFormData } from "@/types/archive";
 
 interface BoxStats {
   kategori: string;
@@ -66,6 +68,10 @@ export default function ArchiveManagement() {
   const [showRetentionMismatchModal, setShowRetentionMismatchModal] =
     useState(false);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+
+  const [serahTerimaArchive, setSerahTerimaArchive] =
+    useState<ArchiveRecord | null>(null);
+  const [savingSerahTerima, setSavingSerahTerima] = useState(false);
 
   // FIXED: Use cookie-based authentication like in HomePage
   const checkAuthStatus = async () => {
@@ -680,6 +686,31 @@ export default function ArchiveManagement() {
     }
   };
 
+  const handleSerahTerima = (archive: ArchiveRecord) => {
+    setSerahTerimaArchive(archive);
+  };
+
+  const handleSaveSerahTerima = async (data: SerahTerimaFormData) => {
+    try {
+      setSavingSerahTerima(true);
+      await archiveAPI.createSerahTerima(data);
+      await mutate();
+      setSerahTerimaArchive(null);
+
+      setSuccessMessage("Berkas berhasil diserahterimakan.");
+      setShowSuccessModal(true);
+    } catch (err: any) {
+      console.error("Error creating serah terima:", err);
+      alert(err.message || "Gagal menyerahterimakan berkas");
+    } finally {
+      setSavingSerahTerima(false);
+    }
+  };
+
+  const handleCancelSerahTerima = () => {
+    setSerahTerimaArchive(null);
+  };
+
   // Show loading while checking auth
   if (authLoading) {
     return (
@@ -730,6 +761,7 @@ export default function ArchiveManagement() {
             setShowDetailModal(true);
           }}
           onPinjam={(archive) => handlePinjamArchive(archive)}
+          onSerahTerima={handleSerahTerima}
           onSort={handleSort}
           sortField={sortField}
           sortOrder={sortOrder}
@@ -850,6 +882,16 @@ export default function ArchiveManagement() {
         onClose={() => setShowPeminjamanErrorModal(false)}
         message={peminjamanErrorMessage}
       />
+
+      {/* Serah Terima Form Modal */}
+      {serahTerimaArchive && (
+        <SerahTerimaForm
+          archive={serahTerimaArchive}
+          onSave={handleSaveSerahTerima}
+          onCancel={handleCancelSerahTerima}
+          loading={savingSerahTerima}
+        />
+      )}
     </div>
   );
 }

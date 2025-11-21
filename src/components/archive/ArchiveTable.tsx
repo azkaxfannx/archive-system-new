@@ -14,6 +14,7 @@ import {
   Calendar,
   CalendarDays,
   BookOpen,
+  FileCheck,
 } from "lucide-react";
 import { ArchiveRecord } from "@/types/archive";
 import StatusBadge from "@/components/ui/StatusBadge";
@@ -32,6 +33,7 @@ interface ArchiveTableProps {
   onDelete: (id: string) => void;
   onView: (archive: ArchiveRecord) => void;
   onPinjam: (archive: ArchiveRecord) => void;
+  onSerahTerima: (archive: ArchiveRecord) => void;
   onSort: (field: string) => void;
   sortField: string;
   sortOrder: "asc" | "desc";
@@ -89,6 +91,7 @@ export default function ArchiveTable({
   onDelete,
   onView,
   onPinjam,
+  onSerahTerima,
   onSort,
   sortField,
   sortOrder,
@@ -104,6 +107,9 @@ export default function ArchiveTable({
   const [showFilters, setShowFilters] = useState(false);
   const [showPeriodFilters, setShowPeriodFilters] = useState(false);
   const [activePeminjaman, setActivePeminjaman] = useState<
+    Record<string, boolean>
+  >({});
+  const [serahTerimaStatus, setSerahTerimaStatus] = useState<
     Record<string, boolean>
   >({});
 
@@ -158,6 +164,53 @@ export default function ArchiveTable({
 
     if (archives.length > 0) {
       fetchActivePeminjaman();
+    }
+  }, [archives, refreshTrigger]);
+
+  // Fetch serah terima status for all archives
+  useEffect(() => {
+    const fetchSerahTerimaStatus = async () => {
+      try {
+        const archiveIds = archives.map((archive) => archive.id);
+        if (archiveIds.length === 0) {
+          setSerahTerimaStatus({});
+          return;
+        }
+
+        const promises = archiveIds.map(async (archiveId) => {
+          try {
+            const response = await fetch(
+              `/api/serah-terima?archiveId=${archiveId}`
+            );
+            const result = await response.json();
+
+            if (result.success && result.data && result.data.length > 0) {
+              return { archiveId, hasSerahTerima: true };
+            }
+            return { archiveId, hasSerahTerima: false };
+          } catch (error) {
+            return { archiveId, hasSerahTerima: false };
+          }
+        });
+
+        const results = await Promise.all(promises);
+        const serahTerimaMap = results.reduce(
+          (acc, { archiveId, hasSerahTerima }) => {
+            acc[archiveId] = hasSerahTerima;
+            return acc;
+          },
+          {} as Record<string, boolean>
+        );
+
+        setSerahTerimaStatus(serahTerimaMap);
+      } catch (error) {
+        console.error("Error fetching serah terima status:", error);
+        setSerahTerimaStatus({});
+      }
+    };
+
+    if (archives.length > 0) {
+      fetchSerahTerimaStatus();
     }
   }, [archives, refreshTrigger]);
 
@@ -230,8 +283,17 @@ export default function ArchiveTable({
     onPeriodFilterChange("endMonth", "");
   };
 
-  const getRowColorClass = (index: number) =>
-    index % 2 === 0 ? "bg-white" : "bg-gray-50";
+  const getRowColorClass = (index: number, archiveId: string) => {
+    // Highlight merah jika sedang dipinjam
+    if (activePeminjaman[archiveId]) {
+      return "bg-red-50";
+    }
+    // Highlight ungu jika sudah diserahterimakan
+    if (serahTerimaStatus[archiveId]) {
+      return "bg-purple-50";
+    }
+    return index % 2 === 0 ? "bg-white" : "bg-gray-50";
+  };
 
   const formatDocumentDate = (dateString: string | null | undefined) => {
     if (!dateString) return "-";
@@ -247,6 +309,8 @@ export default function ArchiveTable({
   };
 
   const canBorrow = (archiveId: string) => !activePeminjaman[archiveId];
+  const canHandOver = (archiveId: string) =>
+    !activePeminjaman[archiveId] && !serahTerimaStatus[archiveId];
 
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -438,7 +502,7 @@ export default function ArchiveTable({
         </div>
       )}
 
-      {/* Column Filters - Diperbaiki seperti PeminjamanTable */}
+      {/* Column Filters */}
       {showFilters && (
         <div className="px-6 py-4 bg-gray-50 border-b">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -574,8 +638,9 @@ export default function ArchiveTable({
               <tr
                 key={archive.id}
                 className={`hover:bg-blue-50 transition-colors ${getRowColorClass(
-                  index
-                )} ${!canBorrow(archive.id) ? "bg-red-50" : ""}`}
+                  index,
+                  archive.id
+                )}`}
               >
                 {/* No. Surat */}
                 <td className="px-6 py-4 whitespace-nowrap">
@@ -584,6 +649,11 @@ export default function ArchiveTable({
                     {!canBorrow(archive.id) && (
                       <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
                         Sedang Dipinjam
+                      </span>
+                    )}
+                    {serahTerimaStatus[archive.id] && (
+                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                        Sudah Diserahterimakan
                       </span>
                     )}
                   </div>
@@ -669,6 +739,29 @@ export default function ArchiveTable({
                         title="Arsip sedang dipinjam"
                       >
                         <BookOpen size={16} />
+                      </button>
+                    )}
+
+                    {/* Conditional Serah Terima Button */}
+                    {canHandOver(archive.id) ? (
+                      <button
+                        onClick={() => onSerahTerima(archive)}
+                        className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
+                        title="Serahterimakan Berkas"
+                      >
+                        <FileCheck size={16} />
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        className="text-gray-400 p-1 rounded cursor-not-allowed"
+                        title={
+                          activePeminjaman[archive.id]
+                            ? "Arsip sedang dipinjam"
+                            : "Arsip sudah diserahterimakan"
+                        }
+                      >
+                        <FileCheck size={16} />
                       </button>
                     )}
 

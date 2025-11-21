@@ -3,6 +3,7 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import PeminjamanManagement from "@/components/peminjaman/PeminjamanManagement";
+import SerahTerimaManagement from "@/components/serah-terima/SerahTerimaManagement";
 import ArchiveManagement from "@/components/archive/ArchiveManagement";
 import "../app/globals.css";
 
@@ -23,19 +24,18 @@ export default function HomePageClient() {
 
       const response = await fetch("/api/auth/me", {
         method: "GET",
-        credentials: "include", // Include cookies
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          // Add cache-control to prevent caching issues
           "Cache-Control": "no-cache",
         },
       });
 
-      console.log("Auth check response status:", response.status); // Debug log
+      console.log("Auth check response status:", response.status);
 
       if (response.ok) {
         const data = await response.json();
-        console.log("Auth check data:", data); // Debug log
+        console.log("Auth check data:", data);
 
         if (data.user) {
           console.log("✅ Setting isAuth TRUE");
@@ -54,7 +54,6 @@ export default function HomePageClient() {
     } catch (error) {
       console.error("Auth check failed:", error);
 
-      // Retry once after a short delay if this is the first failure
       if (retryCount === 0) {
         console.log("Retrying auth check...");
         await new Promise((resolve) => setTimeout(resolve, 200));
@@ -74,12 +73,9 @@ export default function HomePageClient() {
     checkAuth();
   }, []);
 
-  // Prevent flash of login page when navigating from login
   useEffect(() => {
-    // If we're coming from login (check referrer or add query param)
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get("from") === "login") {
-      // Remove the parameter
       urlParams.delete("from");
       const newUrl =
         window.location.pathname +
@@ -96,7 +92,6 @@ export default function HomePageClient() {
     router.push("?" + params.toString());
   };
 
-  // Show loading spinner while checking auth
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -105,7 +100,6 @@ export default function HomePageClient() {
     );
   }
 
-  // Don't render anything if not authenticated
   if (!isAuth) {
     return null;
   }
@@ -130,18 +124,22 @@ export default function HomePageClient() {
           >
             Peminjaman
           </button>
+          <button
+            onClick={() => setTab("serah-terima")}
+            className={`px-3 py-1 rounded ${
+              tab === "serah-terima"
+                ? "bg-purple-600 text-white"
+                : "bg-gray-200"
+            }`}
+          >
+            Serah Terima
+          </button>
         </div>
-
-        {/* <div className="flex items-center space-x-4">
-          {user && (
-            <span className="text-sm text-gray-600">
-              Welcome, {user.name || user.email}
-            </span>
-          )}
-        </div> */}
       </div>
 
-      {tab === "archive" ? <ArchiveManagement /> : <PeminjamanManagement />}
+      {tab === "archive" && <ArchiveManagement />}
+      {tab === "peminjaman" && <PeminjamanManagement />}
+      {tab === "serah-terima" && <SerahTerimaManagement />}
     </div>
   );
 }

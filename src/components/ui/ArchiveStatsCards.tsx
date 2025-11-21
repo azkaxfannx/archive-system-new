@@ -8,8 +8,8 @@ import {
   ChevronUp,
   Database,
   Archive,
-  Filter,
-  X,
+  Minus,
+  Plus,
 } from "lucide-react";
 import {
   BarChart,
@@ -59,7 +59,21 @@ export default function ArchiveStatsCards({
   jenisNaskahDinasData,
 }: StatsCardsProps) {
   const [isTableExpanded, setIsTableExpanded] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
+  // State untuk mengontrol chart mana yang dibuka
+  const [expandedCharts, setExpandedCharts] = useState({
+    jenisNaskahDinas: true,
+    statusArsip: true,
+    boxPerKategori: true,
+    arsipPerKategori: true,
+  });
+
+  // Fungsi untuk toggle chart
+  const toggleChart = (chartName: keyof typeof expandedCharts) => {
+    setExpandedCharts((prev) => ({
+      ...prev,
+      [chartName]: !prev[chartName],
+    }));
+  };
 
   // Data untuk charts
   const archiveStatusData = [
@@ -139,17 +153,16 @@ export default function ArchiveStatsCards({
   // Handle status filter from pie chart
   const handleStatusFilter = (status: string) => {
     const currentStatus = columnFilters.status;
-    // Toggle filter: if same status is clicked, remove filter; otherwise set new filter
     const newStatus = currentStatus === status ? "" : status;
     onColumnFilter?.("status", newStatus);
   };
 
-  // Handle category filter from charts
+  // Handle category filter from charts - UBAH INI
   const handleCategoryFilter = (kategori: string) => {
     if (!kategori) {
-      onColumnFilter("lokasiSimpan", "");
+      onColumnFilter("nomorBerkas", ""); // Ubah dari kodeUnit ke nomorBerkas
     } else {
-      onColumnFilter("lokasiSimpan", kategori + ".");
+      onColumnFilter("nomorBerkas", kategori + "."); // Filter berdasarkan prefix nomorBerkas
     }
   };
 
@@ -157,25 +170,127 @@ export default function ArchiveStatsCards({
     const kategori = data?.payload?.kategori as string | undefined;
     if (!kategori) return;
 
-    const currentFilter = columnFilters.lokasiSimpan;
+    const currentFilter = columnFilters.nomorBerkas; // Ubah ke nomorBerkas
     // toggle: kalau sudah difilter kategori ini, kosongkan filter
-    if (currentFilter === kategori + ".") {
-      onColumnFilter("lokasiSimpan", "");
+    if (currentFilter?.startsWith(kategori + ".")) {
+      onColumnFilter("nomorBerkas", "");
     } else {
-      onColumnFilter("lokasiSimpan", kategori + ".");
+      onColumnFilter("nomorBerkas", kategori + ".");
     }
   };
 
-  // Check if any filters are active
-  const activeFiltersCount = Object.values(columnFilters || {}).filter(
-    (v) => v !== ""
-  ).length;
+  // Fungsi untuk menentukan layout grid yang benar-benar fleksibel
+  const getFlexibleGridClass = () => {
+    const openCharts = Object.entries(expandedCharts)
+      .filter(([_, isOpen]) => isOpen)
+      .map(([key]) => key);
 
-  // Clear all chart-based filters
-  const clearChartFilters = () => {
-    onColumnFilter("status", "");
-    onColumnFilter("jenisNaskahDinas", "");
+    if (openCharts.length === 0) return "";
+
+    // Untuk 1 chart, gunakan layout yang memanfaatkan ruang penuh
+    if (openCharts.length === 1) {
+      return "grid-cols-1";
+    }
+
+    // Untuk 2 chart, selalu 2 kolom
+    if (openCharts.length === 2) {
+      return "grid-cols-1 lg:grid-cols-2";
+    }
+
+    // Untuk 3 chart: 2 di atas (sejajar), 1 di bawah (full width)
+    if (openCharts.length === 3) {
+      return "grid-cols-1 lg:grid-cols-2";
+    }
+
+    // Untuk 4 chart, 2x2 grid
+    return "grid-cols-1 lg:grid-cols-2";
   };
+
+  // Fungsi untuk menentukan row span berdasarkan chart dan jumlah chart terbuka
+  const getChartRowSpan = (chartKey: string) => {
+    const openCharts = Object.entries(expandedCharts)
+      .filter(([_, isOpen]) => isOpen)
+      .map(([key]) => key);
+
+    if (openCharts.length !== 3) return "";
+
+    // Untuk 3 chart, chart ketiga (berdasarkan urutan state) akan full width
+    const thirdChart = openCharts[2]; // Chart ketiga yang dibuka
+    return chartKey === thirdChart ? "lg:col-span-2" : "";
+  };
+
+  // Fungsi untuk menentukan tinggi chart yang benar-benar adaptif
+  const getAdaptiveChartHeight = (chartKey?: string) => {
+    const openChartsCount =
+      Object.values(expandedCharts).filter(Boolean).length;
+
+    // Untuk pie chart, tinggi khusus agar proporsional
+    if (chartKey === "jenisNaskahDinas") {
+      switch (openChartsCount) {
+        case 1:
+          return 500; // Sangat besar untuk 1 chart
+        case 2:
+          return 400; // Besar untuk 2 chart
+        case 3:
+          // Jika pie chart adalah yang full width di 3 chart
+          const openCharts = Object.entries(expandedCharts)
+            .filter(([_, isOpen]) => isOpen)
+            .map(([key]) => key);
+          const isFullWidth = openCharts[2] === "jenisNaskahDinas";
+          return isFullWidth ? 400 : 300;
+        case 4:
+          return 250; // Normal untuk 4 chart
+        default:
+          return 300;
+      }
+    }
+
+    // Untuk chart lainnya
+    switch (openChartsCount) {
+      case 1:
+        return 500;
+      case 2:
+        return 400;
+      case 3:
+        const openCharts = Object.entries(expandedCharts)
+          .filter(([_, isOpen]) => isOpen)
+          .map(([key]) => key);
+        const isFullWidth = openCharts[2] === chartKey;
+        return isFullWidth ? 400 : 300;
+      case 4:
+        return 250;
+      default:
+        return 300;
+    }
+  };
+
+  // Fungsi untuk menentukan outer radius pie chart yang proporsional
+  const getPieChartRadius = () => {
+    const openChartsCount =
+      Object.values(expandedCharts).filter(Boolean).length;
+
+    switch (openChartsCount) {
+      case 1:
+        return 180; // Sangat besar untuk 1 chart
+      case 2:
+        return 120; // Besar untuk 2 chart
+      case 3:
+        const openCharts = Object.entries(expandedCharts)
+          .filter(([_, isOpen]) => isOpen)
+          .map(([key]) => key);
+        const isFullWidth = openCharts[2] === "jenisNaskahDinas";
+        return isFullWidth ? 140 : 100;
+      case 4:
+        return 80; // Normal untuk 4 chart
+      default:
+        return 100;
+    }
+  };
+
+  // Dapatkan chart yang sedang terbuka
+  const openCharts = Object.entries(expandedCharts)
+    .filter(([_, isOpen]) => isOpen)
+    .map(([key]) => key);
 
   return (
     <div className="space-y-6 mb-6">
@@ -186,7 +301,7 @@ export default function ArchiveStatsCards({
           return (
             <div
               key={stat.name}
-              className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow border border-gray-100"
+              className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-all duration-300 border border-gray-100"
             >
               <div className="flex items-center">
                 <div className={`p-3 ${stat.bgColor} rounded-lg`}>
@@ -207,132 +322,219 @@ export default function ArchiveStatsCards({
           );
         })}
       </div>
-      {/* Interactive Charts */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {/* Interactive Pie Chart - Status Distribution */}
-        <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center">
-              <BarChart3 className="text-blue-600 mr-3" size={20} />
-              <h3 className="text-lg font-semibold text-gray-900">
-                Distribusi Jenis Naskah Dinas
-              </h3>
-            </div>
-            <span className="ml-auto text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              Klik untuk filter
-            </span>
-          </div>
 
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={jenisNaskahDinasData.map((j, i) => ({
-                  name: j.jenis,
-                  value: j.total,
-                  color: COLORS[i % COLORS.length],
-                  filterValue: j.jenis,
-                }))}
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                dataKey="value"
-                onClick={(data) => {
-                  const clickedJenis = data.name;
-                  const currentFilter = columnFilters.jenisNaskahDinas;
-                  onColumnFilter(
-                    "jenisNaskahDinas",
-                    currentFilter === clickedJenis ? "" : clickedJenis
-                  );
-                }}
-                style={{ cursor: "pointer" }}
-              >
-                {jenisNaskahDinasData.map((_, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={COLORS[index % COLORS.length]}
-                    stroke={
-                      columnFilters.jenisNaskahDinas === _.jenis
-                        ? "#000"
-                        : "none"
-                    }
-                    strokeWidth={
-                      columnFilters.jenisNaskahDinas === _.jenis ? 3 : 0
-                    }
-                    style={{ cursor: "pointer" }}
-                  />
-                ))}
-              </Pie>
+      {/* Kontrol Chart */}
+      <div className="flex flex-wrap justify-center gap-2">
+        {Object.entries(expandedCharts).map(([key, isExpanded]) => (
+          <button
+            key={key}
+            onClick={() => toggleChart(key as keyof typeof expandedCharts)}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+              isExpanded
+                ? "bg-blue-100 text-blue-700 hover:bg-blue-200 shadow-md border border-blue-200"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
+            }`}
+          >
+            {key === "jenisNaskahDinas" && "Jenis Naskah"}
+            {key === "statusArsip" && "Status Arsip"}
+            {key === "boxPerKategori" && "Box per Kategori"}
+            {key === "arsipPerKategori" && "Arsip per Kategori"}
+            {isExpanded ? " ✓" : " +"}
+          </button>
+        ))}
+      </div>
 
-              <Tooltip
-                formatter={(value, name) => [value.toLocaleString(), name]}
-              />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Summary Stats Visual with Interactive Elements */}
-        <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-100">
-          <div className="flex items-center mb-4">
-            <TrendingUp className="text-green-600 mr-3" size={20} />
-            <h3 className="text-lg font-semibold text-gray-900">
-              Summary Status Arsip
-            </h3>
-            <span className="ml-auto text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              Klik untuk filter
-            </span>
-          </div>
-          <div className="space-y-4">
-            {archiveStatusData.map((item) => (
-              <div
-                key={item.name}
-                onClick={() => handleStatusFilter(item.filterValue)}
-                className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all ${
-                  columnFilters.status === item.filterValue
-                    ? "bg-blue-50 ring-2 ring-blue-200"
-                    : "bg-gray-50 hover:bg-gray-100"
-                }`}
-              >
+      {/* Container Charts dengan layout yang benar-benar fleksibel */}
+      <div
+        className={`grid ${getFlexibleGridClass()} gap-6 transition-all duration-500`}
+      >
+        {/* Chart 1: Jenis Naskah Dinas */}
+        {expandedCharts.jenisNaskahDinas && (
+          <div
+            className={`bg-white rounded-lg shadow-lg border border-gray-100 transition-all duration-500 hover:shadow-xl ${getChartRowSpan(
+              "jenisNaskahDinas"
+            )}`}
+          >
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center">
-                  <div
-                    className="w-4 h-4 rounded-full mr-3"
-                    style={{ backgroundColor: item.color }}
-                  ></div>
-                  <span className="font-medium text-gray-700">{item.name}</span>
-                  {columnFilters.status === item.filterValue && (
-                    <span className="ml-2 text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">
-                      Dipilih
-                    </span>
-                  )}
+                  <BarChart3 className="text-blue-600 mr-3" size={20} />
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Distribusi Jenis Naskah Dinas
+                  </h3>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <span
-                    className="text-2xl font-bold"
-                    style={{ color: item.color }}
-                  >
-                    {item.value.toLocaleString()}
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                    Klik untuk filter
                   </span>
-                  <div className="w-16 bg-gray-200 rounded-full h-2">
-                    <div
-                      className="h-2 rounded-full"
-                      style={{
-                        backgroundColor: item.color,
-                        width: `${(item.value / totalCount) * 100}%`,
-                      }}
-                    ></div>
-                  </div>
+                  <button
+                    onClick={() => toggleChart("jenisNaskahDinas")}
+                    className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-100 transition-colors"
+                  >
+                    <Minus size={16} />
+                  </button>
                 </div>
               </div>
-            ))}
+
+              <ResponsiveContainer
+                width="100%"
+                height={getAdaptiveChartHeight("jenisNaskahDinas")}
+                className="transition-all duration-300"
+              >
+                <PieChart>
+                  <Pie
+                    data={jenisNaskahDinasData.map((j, i) => ({
+                      name: j.jenis,
+                      value: j.total,
+                      color: COLORS[i % COLORS.length],
+                      filterValue: j.jenis,
+                    }))}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={getPieChartRadius()}
+                    dataKey="value"
+                    onClick={(data) => {
+                      const clickedJenis = data.name;
+                      const currentFilter = columnFilters.jenisNaskahDinas;
+                      onColumnFilter(
+                        "jenisNaskahDinas",
+                        currentFilter === clickedJenis ? "" : clickedJenis
+                      );
+                    }}
+                    style={{ cursor: "pointer" }}
+                    label={false}
+                  >
+                    {jenisNaskahDinasData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={COLORS[index % COLORS.length]}
+                        stroke={
+                          columnFilters.jenisNaskahDinas === entry.jenis
+                            ? "#000"
+                            : "none"
+                        }
+                        strokeWidth={
+                          columnFilters.jenisNaskahDinas === entry.jenis ? 3 : 0
+                        }
+                        style={{ cursor: "pointer" }}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value, name) => [value.toLocaleString(), name]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-        </div>
-      </div>
-      {/* Box Stats Charts - Interactive */}
-      {boxStatsByCategory.length > 0 && (
-        <>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {/* Interactive Bar Chart - Box per Kategori */}
-            <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-100">
+        )}
+
+        {/* Chart 2: Status Arsip */}
+        {expandedCharts.statusArsip && (
+          <div
+            className={`bg-white rounded-lg shadow-lg border border-gray-100 transition-all duration-500 hover:shadow-xl ${getChartRowSpan(
+              "statusArsip"
+            )}`}
+          >
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center">
+                  <TrendingUp className="text-green-600 mr-3" size={20} />
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Summary Status Arsip
+                  </h3>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                    Klik untuk filter
+                  </span>
+                  <button
+                    onClick={() => toggleChart("statusArsip")}
+                    className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-100 transition-colors"
+                  >
+                    <Minus size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <div
+                className="space-y-4 transition-all duration-300"
+                style={{
+                  minHeight: `${getAdaptiveChartHeight("statusArsip") - 80}px`,
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent:
+                    openCharts.length === 1 ? "center" : "flex-start",
+                }}
+              >
+                {archiveStatusData.map((item) => (
+                  <div
+                    key={item.name}
+                    onClick={() => handleStatusFilter(item.filterValue)}
+                    className={`flex items-center justify-between p-4 rounded-lg cursor-pointer transition-all duration-300 ${
+                      columnFilters.status === item.filterValue
+                        ? "bg-blue-50 ring-2 ring-blue-200 transform scale-[1.02] shadow-md"
+                        : "bg-gray-50 hover:bg-gray-100 hover:scale-[1.01] shadow-sm"
+                    } ${openCharts.length === 1 ? "py-6" : "py-3"}`}
+                  >
+                    <div className="flex items-center">
+                      <div
+                        className="w-4 h-4 rounded-full mr-3 transition-colors"
+                        style={{ backgroundColor: item.color }}
+                      ></div>
+                      <span
+                        className={`font-medium text-gray-700 ${
+                          openCharts.length === 1 ? "text-lg" : "text-base"
+                        }`}
+                      >
+                        {item.name}
+                      </span>
+                      {columnFilters.status === item.filterValue && (
+                        <span className="ml-2 text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">
+                          Dipilih
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <span
+                        className={`font-bold transition-colors ${
+                          openCharts.length === 1 ? "text-3xl" : "text-2xl"
+                        }`}
+                        style={{ color: item.color }}
+                      >
+                        {item.value.toLocaleString()}
+                      </span>
+                      <div
+                        className={`bg-gray-200 rounded-full ${
+                          openCharts.length === 1 ? "w-24 h-3" : "w-16 h-2"
+                        }`}
+                      >
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            backgroundColor: item.color,
+                            width: `${
+                              (item.value / Math.max(totalCount, 1)) * 100
+                            }%`,
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Chart 3: Box per Kategori */}
+        {expandedCharts.boxPerKategori && (
+          <div
+            className={`bg-white rounded-lg shadow-lg border border-gray-100 transition-all duration-500 hover:shadow-xl ${getChartRowSpan(
+              "boxPerKategori"
+            )}`}
+          >
+            <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center">
                   <Package className="text-purple-600 mr-3" size={20} />
@@ -340,23 +542,46 @@ export default function ArchiveStatsCards({
                     Box per Kategori
                   </h3>
                 </div>
-                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                  Klik untuk filter
-                </span>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                    Klik untuk filter
+                  </span>
+                  <button
+                    onClick={() => toggleChart("boxPerKategori")}
+                    className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-100 transition-colors"
+                  >
+                    <Minus size={16} />
+                  </button>
+                </div>
               </div>
-              <ResponsiveContainer width="100%" height={250}>
+              <ResponsiveContainer
+                width="100%"
+                height={getAdaptiveChartHeight("boxPerKategori")}
+                className="transition-all duration-300"
+              >
                 <BarChart data={categoryData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis
                     dataKey="kategori"
-                    tick={{ fontSize: 12, cursor: "pointer" }}
+                    tick={{
+                      fontSize: openCharts.length <= 2 ? 12 : 10,
+                      cursor: "pointer",
+                    }}
+                    stroke="#6b7280"
+                    angle={openCharts.length >= 3 ? -45 : 0}
+                    textAnchor={openCharts.length >= 3 ? "end" : "middle"}
+                    height={openCharts.length >= 3 ? 80 : 40}
+                  />
+                  <YAxis
+                    tick={{
+                      fontSize: openCharts.length <= 2 ? 12 : 10,
+                    }}
                     stroke="#6b7280"
                   />
-                  <YAxis tick={{ fontSize: 12 }} stroke="#6b7280" />
                   <Tooltip
                     formatter={(value, name) => [
                       value,
-                      name === "totalBox" ? "Total Box" : "Total Arsip",
+                      name === "Total Box" ? "Total Box" : "Total Arsip",
                     ]}
                   />
                   <Bar
@@ -370,9 +595,17 @@ export default function ArchiveStatsCards({
                 </BarChart>
               </ResponsiveContainer>
             </div>
+          </div>
+        )}
 
-            {/* Interactive Area Chart - Arsip per Kategori */}
-            <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-100">
+        {/* Chart 4: Arsip per Kategori */}
+        {expandedCharts.arsipPerKategori && (
+          <div
+            className={`bg-white rounded-lg shadow-lg border border-gray-100 transition-all duration-500 hover:shadow-xl ${getChartRowSpan(
+              "arsipPerKategori"
+            )}`}
+          >
+            <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center">
                   <FileText className="text-indigo-600 mr-3" size={20} />
@@ -380,11 +613,18 @@ export default function ArchiveStatsCards({
                     Arsip per Kategori
                   </h3>
                 </div>
-                {/* <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                  Klik untuk filter
-                </span> */}
+                <button
+                  onClick={() => toggleChart("arsipPerKategori")}
+                  className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-100 transition-colors"
+                >
+                  <Minus size={16} />
+                </button>
               </div>
-              <ResponsiveContainer width="100%" height={250}>
+              <ResponsiveContainer
+                width="100%"
+                height={getAdaptiveChartHeight("arsipPerKategori")}
+                className="transition-all duration-300"
+              >
                 <AreaChart data={categoryData}>
                   <defs>
                     <linearGradient
@@ -405,10 +645,21 @@ export default function ArchiveStatsCards({
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis
                     dataKey="kategori"
-                    tick={{ fontSize: 12, cursor: "pointer" }}
+                    tick={{
+                      fontSize: openCharts.length <= 2 ? 12 : 10,
+                      cursor: "pointer",
+                    }}
+                    stroke="#6b7280"
+                    angle={openCharts.length >= 3 ? -45 : 0}
+                    textAnchor={openCharts.length >= 3 ? "end" : "middle"}
+                    height={openCharts.length >= 3 ? 80 : 40}
+                  />
+                  <YAxis
+                    tick={{
+                      fontSize: openCharts.length <= 2 ? 12 : 10,
+                    }}
                     stroke="#6b7280"
                   />
-                  <YAxis tick={{ fontSize: 12 }} stroke="#6b7280" />
                   <Tooltip formatter={(value) => [value, "Total Arsip"]} />
                   <Area
                     type="monotone"
@@ -417,46 +668,60 @@ export default function ArchiveStatsCards({
                     strokeWidth={2}
                     fillOpacity={1}
                     fill="url(#colorArchives)"
-                    onClick={(data: any) =>
-                      handleCategoryFilter(`Kategori ${data.kategori}`)
-                    }
+                    onClick={(data: any) => handleCategoryFilter(data.kategori)}
                     style={{ cursor: "pointer" }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
+        )}
+      </div>
 
-          {/* Enhanced Collapsible Box Stats Table */}
-          <div className="bg-white rounded-lg shadow-lg border border-gray-100">
-            <div
-              className="p-6 cursor-pointer hover:bg-gray-50 transition-colors"
-              onClick={() => setIsTableExpanded(!isTableExpanded)}
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                  <Package className="mr-2 text-purple-600" size={20} />
-                  Detail Box per Kategori
-                  <span className="ml-2 text-sm text-gray-500 font-normal">
-                    ({totalCategories} kategori)
+      {/* Enhanced Collapsible Box Stats Table */}
+      {boxStatsByCategory.length > 0 && (
+        <div className="bg-white rounded-lg shadow-lg border border-gray-100 transition-all duration-300 hover:shadow-xl">
+          <div
+            className="p-6 cursor-pointer hover:bg-gray-50 transition-colors"
+            onClick={() => setIsTableExpanded(!isTableExpanded)}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                <Package className="mr-2 text-purple-600" size={20} />
+                Detail Box per Kategori
+                <span className="ml-2 text-sm text-gray-500 font-normal">
+                  ({totalCategories} kategori)
+                </span>
+              </h3>
+              <div className="flex items-center space-x-2">
+                {mostEfficientCategory.kategori !== "-" && (
+                  <span className="text-sm text-gray-600">
+                    Terefisien: {mostEfficientCategory.kategori} (
+                    {mostEfficientCategory.efficiency}%)
                   </span>
-                </h3>
-                <div className="flex items-center space-x-2">
-                  {mostEfficientCategory.kategori !== "-" && (
-                    <span className="text-sm text-gray-600">
-                      Terefisien: Kategori {mostEfficientCategory.kategori} (
-                      {mostEfficientCategory.efficiency}%)
-                    </span>
-                  )}
-                  {isTableExpanded ? (
-                    <ChevronUp className="text-gray-500" size={20} />
-                  ) : (
-                    <ChevronDown className="text-gray-500" size={20} />
-                  )}
-                </div>
+                )}
+                {isTableExpanded ? (
+                  <ChevronUp
+                    className="text-gray-500 transition-transform"
+                    size={20}
+                  />
+                ) : (
+                  <ChevronDown
+                    className="text-gray-500 transition-transform"
+                    size={20}
+                  />
+                )}
               </div>
             </div>
+          </div>
 
+          <div
+            className={`transition-all duration-500 overflow-hidden ${
+              isTableExpanded
+                ? "max-h-[1000px] opacity-100"
+                : "max-h-0 opacity-0"
+            }`}
+          >
             {isTableExpanded && (
               <div className="px-6 pb-6">
                 <div className="overflow-x-auto">
@@ -483,7 +748,9 @@ export default function ArchiveStatsCards({
                     <tbody>
                       {categoryData.map((boxStat, index) => {
                         const isFiltered =
-                          columnFilters.lokasiSimpan === boxStat.kategori + ".";
+                          columnFilters.nomorBerkas?.startsWith(
+                            boxStat.kategori + "."
+                          );
                         return (
                           <tr
                             key={boxStat.kategori}
@@ -493,10 +760,10 @@ export default function ArchiveStatsCards({
                               isFiltered
                                 ? "ring-2 ring-blue-200 bg-blue-50"
                                 : ""
-                            }`}
+                            } transition-colors duration-300`}
                           >
                             <td className="py-3 px-4 font-medium text-gray-900">
-                              Kategori {boxStat.kategori}
+                              {boxStat.kategori}
                               {isFiltered && (
                                 <span className="ml-2 text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">
                                   Dipilih
@@ -531,13 +798,13 @@ export default function ArchiveStatsCards({
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleCategoryFilter(
-                                    isFiltered ? "" : boxStat.kategori // kalau sudah filter → hapus
+                                    isFiltered ? "" : boxStat.kategori
                                   );
                                 }}
-                                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                                className={`px-3 py-1 rounded text-xs font-medium transition-all duration-300 ${
                                   isFiltered
-                                    ? "bg-red-100 text-red-700 hover:bg-red-200"
-                                    : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                                    ? "bg-red-100 text-red-700 hover:bg-red-200 transform hover:scale-105"
+                                    : "bg-blue-100 text-blue-700 hover:bg-blue-200 transform hover:scale-105"
                                 }`}
                               >
                                 {isFiltered ? "Hapus Filter" : "Filter"}
@@ -552,7 +819,7 @@ export default function ArchiveStatsCards({
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
     </div>
   );

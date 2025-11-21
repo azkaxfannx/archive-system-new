@@ -1,19 +1,21 @@
+// types/archive.ts - Updated version
+
 // Archive record interface
 export interface ArchiveRecord {
   id: string;
   kodeUnit?: string;
   indeks?: string;
   nomorBerkas?: string;
-  nomorIsiBerkas?: string; // baru
+  nomorIsiBerkas?: string;
   judulBerkas?: string;
-  jenisNaskahDinas?: string; // ganti dari jenisNaskah
+  jenisNaskahDinas?: string;
   nomorSurat?: string;
   klasifikasi?: string;
   perihal?: string;
   tanggal?: string;
   tingkatPerkembangan?: string;
   kondisi?: string;
-  lokasiSimpan?: string; // ganti dari lokasi
+  lokasiSimpan?: string;
   retensiAktif?: string;
   retensiInaktif?: string;
   keterangan?: string;
@@ -28,6 +30,8 @@ export interface ArchiveRecord {
     name: string;
     role: "ADMIN" | "USER";
   };
+
+  serahTerima?: SerahTerimaRecord;
 }
 
 // Form data interface
@@ -35,16 +39,16 @@ export interface ArchiveFormData {
   kodeUnit?: string;
   indeks?: string;
   nomorBerkas?: string;
-  nomorIsiBerkas?: string; // baru
+  nomorIsiBerkas?: string;
   judulBerkas?: string;
-  jenisNaskahDinas?: string; // ganti dari jenisNaskah
+  jenisNaskahDinas?: string;
   nomorSurat?: string;
   klasifikasi?: string;
   perihal?: string;
   tanggal?: string;
   tingkatPerkembangan?: string;
   kondisi?: string;
-  lokasiSimpan?: string; // ganti dari lokasi
+  lokasiSimpan?: string;
   retensiAktif?: string;
   retensiInaktif?: string;
   keterangan?: string;
@@ -72,9 +76,32 @@ export interface PeminjamanFormData {
   nomorSurat: string;
   peminjam: string;
   keperluan: string;
-  tanggalPinjam?: string; // optional karena bisa auto-set ke today
-  tanggalHarusKembali?: string; // optional karena auto-calculated
+  tanggalPinjam?: string;
+  tanggalHarusKembali?: string;
   tanggalPengembalian?: string | null;
+  archiveId: string;
+}
+
+// SerahTerima interfaces
+export interface SerahTerimaRecord {
+  id: string;
+  nomorBeritaAcara: string;
+  pihakPenyerah: string;
+  pihakPenerima: string;
+  tanggalSerahTerima: string;
+  keterangan?: string | null;
+  archiveId: string;
+  archive: ArchiveRecord;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SerahTerimaFormData {
+  nomorBeritaAcara: string;
+  pihakPenyerah: string;
+  pihakPenerima: string;
+  tanggalSerahTerima?: string;
+  keterangan?: string | null;
   archiveId: string;
 }
 
