@@ -12,7 +12,7 @@ model User {
   id        String    @id @default(uuid())
   name      String
   nip       String    @unique
-  password  String    // simpan hash!
+  password  String
   role      Role      @default(USER)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -44,14 +44,10 @@ model Archive {
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
-  // Owner (pengupload)
   userId              String
   user                User         @relation(fields: [userId], references: [id])
 
-  // Relasi Peminjaman
   peminjaman          Peminjaman[]
-  
-  // Relasi Serah Terima
   serahTerima         SerahTerima?
 }
 
@@ -73,19 +69,35 @@ model Peminjaman {
 }
 
 model SerahTerima {
-  id                  String    @id @default(uuid())
-  nomorBeritaAcara    String    @unique
+  id                  String              @id @default(uuid())
+  
+  // Usulan fields (diisi saat usulan)
   pihakPenyerah       String
   pihakPenerima       String
-  tanggalSerahTerima  DateTime
+  tanggalUsulan       DateTime            @default(now())
+  statusUsulan        StatusUsulan        @default(PENDING)
+  
+  // Approval fields (diisi setelah diterima)
+  nomorBeritaAcara    String?             @unique
+  tanggalSerahTerima  DateTime?
   keterangan          String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  
+  // Rejection field
+  alasanPenolakan     String?
+  
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
-  archiveId           String    @unique
-  archive             Archive   @relation(fields: [archiveId], references: [id], onDelete: Cascade)
+  archiveId           String              @unique
+  archive             Archive             @relation(fields: [archiveId], references: [id], onDelete: Cascade)
 
   @@map("serah_terima")
+}
+
+enum StatusUsulan {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum Status {

@@ -1,4 +1,4 @@
-// types/archive.ts - Updated version
+// types/archive.ts - Complete Updated Version with Usulan Status
 
 // Archive record interface
 export interface ArchiveRecord {
@@ -24,13 +24,11 @@ export interface ArchiveRecord {
   status: "ACTIVE" | "INACTIVE" | "DISPOSE_ELIGIBLE";
   createdAt: string;
   updatedAt: string;
-
   user?: {
     id: string;
     name: string;
     role: "ADMIN" | "USER";
   };
-
   serahTerima?: SerahTerimaRecord;
 }
 
@@ -82,22 +80,61 @@ export interface PeminjamanFormData {
   archiveId: string;
 }
 
-// SerahTerima interfaces
+// ========== SERAH TERIMA INTERFACES (UPDATED) ==========
+
+// Status usulan enum
+export type StatusUsulan = "PENDING" | "APPROVED" | "REJECTED";
+
+// SerahTerima record with usulan status
 export interface SerahTerimaRecord {
   id: string;
-  nomorBeritaAcara: string;
+  
+  // Usulan fields (always filled)
   pihakPenyerah: string;
   pihakPenerima: string;
-  tanggalSerahTerima: string;
-  keterangan?: string | null;
+  tanggalUsulan: string;
+  statusUsulan: StatusUsulan;
+  
+  // Approval fields (nullable - only filled when approved)
+  nomorBeritaAcara: string | null;
+  tanggalSerahTerima: string | null;
+  keterangan: string | null;
+  
+  // Rejection field (nullable - only filled when rejected)
+  alasanPenolakan: string | null;
+  
   archiveId: string;
-  archive: ArchiveRecord;
+  archive?: {
+    id: string;
+    judulBerkas?: string;
+    nomorBerkas?: string;
+    klasifikasi?: string;
+    nomorSurat?: string;
+    perihal?: string;
+    tanggal?: string;
+    lokasiSimpan?: string;
+  };
   createdAt: string;
   updatedAt: string;
 }
 
-export interface SerahTerimaFormData {
+// Form data for creating usulan (simplified)
+export interface SerahTerimaUsulanFormData {
+  pihakPenyerah: string;
+  pihakPenerima: string;
+  archiveId: string;
+}
+
+// Form data for approval
+export interface SerahTerimaApprovalFormData {
   nomorBeritaAcara: string;
+  tanggalSerahTerima: string;
+  keterangan?: string;
+}
+
+// Legacy form data (for backward compatibility and editing approved)
+export interface SerahTerimaFormData {
+  nomorBeritaAcara?: string;
   pihakPenyerah: string;
   pihakPenerima: string;
   tanggalSerahTerima?: string;
@@ -128,6 +165,9 @@ export interface ArchiveParams {
   order?: "asc" | "desc";
   status?: string;
   filters?: Record<string, string>;
+  startMonth?: string;
+  endMonth?: string;
+  year?: string;
 }
 
 // Import result interface
@@ -137,6 +177,9 @@ export interface ImportResult {
   successRows: number;
   failedRows: number;
   errors: ImportError[];
+  hasRetentionMismatches?: boolean;
+  retentionMismatches?: any[];
+  message?: string;
 }
 
 // Import error interface

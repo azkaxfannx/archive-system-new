@@ -165,7 +165,7 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
               <li>
                 • Sistem akan memvalidasi masa retensi berdasarkan klasifikasi
               </li>
-              <li>• Contoh: KU (Kepegawaian) = 10 tahun</li>
+              <li>• Contoh: KU (Keuangan) = 10 tahun</li>
               <li>
                 • Jika tidak sesuai, akan muncul konfirmasi untuk perbaikan
               </li>

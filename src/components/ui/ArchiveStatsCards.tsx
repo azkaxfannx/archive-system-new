@@ -47,6 +47,45 @@ interface StatsCardsProps {
   jenisNaskahDinasData: { jenis: string; total: number }[];
 }
 
+  // Helper function untuk convert HSL ke HEX
+  const hslToHex = (h: number, s: number, l: number): string => {
+    l /= 100;
+    const a = (s * Math.min(l, 1 - l)) / 100;
+    const f = (n: number) => {
+      const k = (n + h / 30) % 12;
+      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      return Math.round(255 * color)
+        .toString(16)
+        .padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  };
+
+  // Generate warna unik menggunakan Golden Ratio
+  const generateDistinctColors = (count: number): string[] => {
+    const colors: string[] = [];
+    const goldenRatio = 0.618033988749895;
+    // let hue = Math.random(); // Start dengan hue random
+    let hue = 0.5; // Start dengan hue random
+    
+    for (let i = 0; i < count; i++) {
+      hue += goldenRatio;
+      hue %= 1;
+      
+      // Saturation 65-80%, Lightness 45-60% untuk warna yang vibrant tapi nyaman dilihat
+      const saturation = 0.65 + (Math.random() * 0.15);
+      const lightness = 0.45 + (Math.random() * 0.15);
+      
+      const h = hue * 360;
+      const s = saturation * 100;
+      const l = lightness * 100;
+      
+      colors.push(hslToHex(h, s, l));
+    }
+    
+    return colors;
+  };
+
 export default function ArchiveStatsCards({
   totalCount,
   activeCount,
@@ -97,7 +136,7 @@ export default function ArchiveStatsCards({
     },
   ];
 
-  const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"];
+  // const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"];
 
   const categoryData = boxStatsByCategory.map((item) => ({
     kategori: item.kategori,
@@ -292,6 +331,12 @@ export default function ArchiveStatsCards({
     .filter(([_, isOpen]) => isOpen)
     .map(([key]) => key);
 
+  // Generate warna unik berdasarkan jumlah data
+  const uniqueColors = React.useMemo(
+    () => generateDistinctColors(jenisNaskahDinasData.length),
+    [jenisNaskahDinasData.length]
+  );
+
   return (
     <div className="space-y-6 mb-6">
       {/* Main Stats Cards */}
@@ -386,7 +431,7 @@ export default function ArchiveStatsCards({
                     data={jenisNaskahDinasData.map((j, i) => ({
                       name: j.jenis,
                       value: j.total,
-                      color: COLORS[i % COLORS.length],
+                      color: uniqueColors[i],  // ← UBAH INI
                       filterValue: j.jenis,
                     }))}
                     cx="50%"
@@ -407,7 +452,7 @@ export default function ArchiveStatsCards({
                     {jenisNaskahDinasData.map((entry, index) => (
                       <Cell
                         key={`cell-${index}`}
-                        fill={COLORS[index % COLORS.length]}
+                        fill={uniqueColors[index]}  // ← UBAH INI
                         stroke={
                           columnFilters.jenisNaskahDinas === entry.jenis
                             ? "#000"

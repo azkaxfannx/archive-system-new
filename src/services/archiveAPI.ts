@@ -1,4 +1,4 @@
-// services/archiveAPI.ts - Updated version
+// services/archiveAPI.ts - Complete Updated Version
 import {
   ArchiveRecord,
   ArchiveFormData,
@@ -193,27 +193,28 @@ export const archiveAPI = {
     return res.json();
   },
 
-  // ========== SERAH TERIMA METHODS ==========
+  // ========== SERAH TERIMA METHODS (UPDATED) ==========
 
-  // Create serah terima
-  async createSerahTerima(
-    data: SerahTerimaFormData
-  ): Promise<SerahTerimaRecord> {
+  // Create usulan serah terima (NEW)
+  async createSerahTerimaUsulan(data: {
+    pihakPenyerah: string;
+    pihakPenerima: string;
+    archiveId: string;
+  }): Promise<SerahTerimaRecord> {
     const res = await fetch("/api/serah-terima", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify(data),
     });
 
     if (!res.ok) {
-      const errorData = await res.json();
-      throw new Error(errorData.error || "Failed to create serah terima");
+      const error = await res.json();
+      throw new Error(error.error || "Failed to create usulan");
     }
 
-    return res.json();
+    const result = await res.json();
+    return result.data;
   },
 
   // Get all serah terima
@@ -241,7 +242,53 @@ export const archiveAPI = {
     return res.json();
   },
 
-  // Update serah terima
+  // Approve usulan serah terima (NEW)
+  async approveSerahTerima(
+    id: string,
+    data: {
+      nomorBeritaAcara: string;
+      tanggalSerahTerima: string;
+      keterangan?: string;
+    }
+  ): Promise<SerahTerimaRecord> {
+    const res = await fetch(`/api/serah-terima/${id}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw { response: { data: error } };
+    }
+
+    const result = await res.json();
+    return result.data;
+  },
+
+  // Reject usulan serah terima (NEW)
+  async rejectSerahTerima(
+    id: string,
+    alasanPenolakan: string
+  ): Promise<SerahTerimaRecord> {
+    const res = await fetch(`/api/serah-terima/${id}/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ alasanPenolakan }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw { response: { data: error } };
+    }
+
+    const result = await res.json();
+    return result.data;
+  },
+
+  // Update serah terima (for approved ones only)
   async updateSerahTerima(
     id: string,
     data: Partial<SerahTerimaFormData>
@@ -255,8 +302,13 @@ export const archiveAPI = {
       body: JSON.stringify(data),
     });
 
-    if (!res.ok) throw new Error("Failed to update serah terima");
-    return res.json();
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || "Failed to update serah terima");
+    }
+
+    const result = await res.json();
+    return result.data;
   },
 
   // Delete serah terima
@@ -266,11 +318,15 @@ export const archiveAPI = {
       credentials: "include",
     });
 
-    if (!res.ok) throw new Error("Failed to delete serah terima");
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || "Failed to delete serah terima");
+    }
+
     return res.json();
   },
 
-  // Check if archive can be handed over (tidak sedang dipinjam)
+  // Check archive availability for serah terima
   async checkArchiveAvailability(
     archiveId: string
   ): Promise<{ available: boolean; reason?: string }> {
@@ -309,5 +365,21 @@ export const archiveAPI = {
         reason: "Pemeriksaan ketersediaan gagal, asumsikan arsip tersedia",
       };
     }
+  },
+
+  // ========== LEGACY METHOD (DEPRECATED - keep for backward compatibility) ==========
+  // @deprecated Use createSerahTerimaUsulan instead
+  async createSerahTerima(
+    data: SerahTerimaFormData
+  ): Promise<SerahTerimaRecord> {
+    console.warn(
+      "createSerahTerima is deprecated. Use createSerahTerimaUsulan instead."
+    );
+    // Convert old format to new format
+    return this.createSerahTerimaUsulan({
+      pihakPenyerah: data.pihakPenyerah,
+      pihakPenerima: data.pihakPenerima,
+      archiveId: data.archiveId,
+    });
   },
 };

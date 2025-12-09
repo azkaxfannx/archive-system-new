@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client";
 export async function GET() {
   const cookieStore = await cookies();
   const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+  
   if (!token) {
     return NextResponse.json(
       { error: "Unauthorized - Please login first" },
@@ -29,49 +30,52 @@ export async function GET() {
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
 
-  // Filter kalau USER
+  // Base filter for USER role
   const baseWhere: Prisma.SerahTerimaWhereInput =
     role === "ADMIN" ? {} : { archive: { userId } };
 
+  // Total count
   const totalCount = await prisma.serahTerima.count({
     where: baseWhere,
   });
 
-  // Count this month
+  // Count by status
+  const pendingCount = await prisma.serahTerima.count({
+    where: { ...baseWhere, statusUsulan: "PENDING" },
+  });
+
+  const approvedCount = await prisma.serahTerima.count({
+    where: { ...baseWhere, statusUsulan: "APPROVED" },
+  });
+
+  const rejectedCount = await prisma.serahTerima.count({
+    where: { ...baseWhere, statusUsulan: "REJECTED" },
+  });
+
+  // Count this month (based on tanggalUsulan)
   const thisMonthStart = new Date(currentYear, currentMonth, 1);
   const thisMonthCount = await prisma.serahTerima.count({
     where: {
       ...baseWhere,
-      tanggalSerahTerima: { gte: thisMonthStart },
+      tanggalUsulan: { gte: thisMonthStart },
     },
   });
 
-  // Count this year
+  // Count this year (based on tanggalUsulan)
   const thisYearStart = new Date(currentYear, 0, 1);
   const thisYearCount = await prisma.serahTerima.count({
     where: {
       ...baseWhere,
-      tanggalSerahTerima: { gte: thisYearStart },
-    },
-  });
-
-  // Count pending (archives that can be handed over: not borrowed, not handed over yet)
-  const pendingCount = await prisma.archive.count({
-    where: {
-      ...(role === "ADMIN" ? {} : { userId }),
-      serahTerima: null, // Belum diserahterimakan
-      peminjaman: {
-        none: {
-          tanggalPengembalian: null, // Tidak sedang dipinjam
-        },
-      },
+      tanggalUsulan: { gte: thisYearStart },
     },
   });
 
   return NextResponse.json({
     totalCount,
+    pendingCount,
+    approvedCount,
+    rejectedCount,
     thisMonthCount,
     thisYearCount,
-    pendingCount,
   });
 }

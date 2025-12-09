@@ -9,9 +9,45 @@ import {
   RetentionMismatch,
 } from "@/utils/classificationRules";
 
+// Helper function to find header row
+const findHeaderRow = (sheetData: any[][]): number => {
+  // Cari baris yang mengandung header yang diharapkan
+  for (let i = 0; i < Math.min(sheetData.length, 20); i++) {
+    const row = sheetData[i];
+    if (!Array.isArray(row)) continue;
+    
+    // Gabungkan semua sel dalam baris untuk pencarian
+    const rowText = row.map(cell => 
+      cell ? cell.toString().trim().toUpperCase() : ''
+    ).join(' ');
+    
+    // Cek apakah baris ini mengandung minimal 3 header penting
+    const hasKodeUnit = row.some(cell => 
+      cell && cell.toString().trim().toUpperCase().includes('KODE UNIT')
+    );
+    const hasNomorSurat = row.some(cell => 
+      cell && cell.toString().trim().toUpperCase().includes('NOMOR SURAT')
+    );
+    const hasPerihal = row.some(cell => 
+      cell && cell.toString().trim().toUpperCase().includes('PERIHAL')
+    );
+    
+    if (hasKodeUnit || hasNomorSurat || hasPerihal) {
+      return i;
+    }
+  }
+  return -1;
+};
+
+// Function to normalize header names
+const normalizeHeader = (header: string): string => {
+  if (!header) return '';
+  return header.toString().trim().toUpperCase();
+};
+
 export async function POST(req: Request) {
   try {
-    // FIXED: Get userId from authentication token with await
+    // Authentication
     const cookieStore = await cookies();
     const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
     if (!token) {
@@ -31,9 +67,11 @@ export async function POST(req: Request) {
 
     const userId = payload.userId;
 
+    // Get form data
     const formData = await req.formData();
     const file = formData.get("file") as File;
-    const forceImport = formData.get("forceImport") === "true"; // Flag untuk bypass validasi retensi
+    const forceImport = formData.get("forceImport") === "true";
+    const autoFix = formData.get("autoFix") === "true";
 
     if (!file) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
@@ -70,7 +108,7 @@ export async function POST(req: Request) {
     let success = 0;
     let failed = 0;
     const errors: any[] = [];
-    const retentionMismatches: RetentionMismatch[] = [];
+    const retentionMismatches: (RetentionMismatch & { sheet: string })[] = [];
     const batchEntryDate = new Date();
     let totalRows = 0;
 
@@ -80,13 +118,7 @@ export async function POST(req: Request) {
       if (!sheet) continue;
 
       const sheetData = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 });
-
-      const headerRowIndex = sheetData.findIndex((row) =>
-        row.some(
-          (cell) =>
-            typeof cell === "string" && cell.toUpperCase().includes("KODE UNIT")
-        )
-      );
+      const headerRowIndex = findHeaderRow(sheetData);
 
       if (headerRowIndex === -1) {
         errors.push({
@@ -96,38 +128,74 @@ export async function POST(req: Request) {
         continue;
       }
 
-      const rows = XLSX.utils.sheet_to_json(sheet, {
-        header: sheetData[headerRowIndex] as string[],
-        range: headerRowIndex + 1,
-        defval: "",
-      }) as any[];
+      // Ambil header dari baris yang ditemukan
+      const headers = sheetData[headerRowIndex];
+      // Normalisasi header untuk pencocokan case-insensitive
+      const normalizedHeaders = headers.map((header: any) => 
+        normalizeHeader(header?.toString() || '')
+      );
 
+      // Function untuk mendapatkan nilai berdasarkan nama kolom
+      const getValueByColumnName = (row: any, columnName: string): any => {
+        // Cari indeks kolom berdasarkan nama yang dinormalisasi
+        const columnIndex = normalizedHeaders.findIndex((header: string) => 
+          header.includes(normalizeHeader(columnName)) || 
+          normalizeHeader(columnName).includes(header)
+        );
+        
+        if (columnIndex === -1) return undefined;
+        
+        // Ambil nilai dari baris data asli (bukan yang sudah diparsing)
+        if (Array.isArray(row)) {
+          return row[columnIndex];
+        }
+        
+        // Jika row adalah object (dari sheet_to_json), coba akses dengan header asli
+        if (typeof row === 'object' && row !== null) {
+          const originalHeader = headers[columnIndex];
+          return row[originalHeader];
+        }
+        
+        return undefined;
+      };
+
+      // Konversi data dari header row ke bawah
+      const rows = sheetData.slice(headerRowIndex + 1);
       totalRows += rows.length;
 
-      for (const [index, row] of rows.entries()) {
+      for (const [rowIndex, rawRow] of rows.entries()) {
         try {
-          // Skip baris yang hanya berisi angka/nomor urut
-          const isNumberedRow = Object.values(row).every((value) => {
-            if (value === null || value === undefined || value === "")
-              return false;
-            return !isNaN(Number(value)) && value.toString().trim() !== "";
-          });
-
-          if (isNumberedRow) {
+          // Skip baris kosong
+          if (!rawRow || (Array.isArray(rawRow) && rawRow.every(cell => 
+            cell === null || cell === undefined || cell === '' || 
+            (typeof cell === 'string' && cell.trim() === '')
+          ))) {
             continue;
           }
 
+          // Skip baris yang hanya berisi angka/nomor urut
+          const isNumberedRow = Array.isArray(rawRow) && rawRow.every((value) => {
+            if (value === null || value === undefined || value === "") return false;
+            const str = value.toString().trim();
+            return !isNaN(Number(str)) && str !== "";
+          });
+
+          if (isNumberedRow) continue;
+
+          // Ambil nilai menggunakan nama kolom (case-insensitive)
+          const kodeUnit = getValueByColumnName(rawRow, "KODE UNIT");
+          const nomorSurat = getValueByColumnName(rawRow, "NOMOR SURAT");
+          const nomorNaskahDinas = getValueByColumnName(rawRow, "NOMOR NASKAH DINAS");
+          const perihal = getValueByColumnName(rawRow, "PERIHAL");
+
           // VALIDASI FLEKSIBEL: Terima NOMOR SURAT atau NOMOR NASKAH DINAS
-          const hasNomorSurat =
-            row["NOMOR SURAT"] && row["NOMOR SURAT"].toString().trim() !== "";
-          const hasNomorNaskahDinas =
-            row["NOMOR NASKAH DINAS"] &&
-            row["NOMOR NASKAH DINAS"].toString().trim() !== "";
+          const hasNomorSurat = nomorSurat && nomorSurat.toString().trim() !== "";
+          const hasNomorNaskahDinas = nomorNaskahDinas && nomorNaskahDinas.toString().trim() !== "";
 
           if (
-            !row["KODE UNIT"] ||
+            !kodeUnit ||
             (!hasNomorSurat && !hasNomorNaskahDinas) ||
-            !row["PERIHAL"]
+            !perihal
           ) {
             continue; // Skip invalid rows in validation phase
           }
@@ -142,14 +210,13 @@ export async function POST(req: Request) {
           };
 
           const sanitizeString = (value: any): string | null => {
-            if (value === null || value === undefined || value === "")
-              return null;
+            if (value === null || value === undefined || value === "") return null;
             const str = value.toString().trim();
             return str === "" ? null : str;
           };
 
-          const classification = sanitizeString(row["KLASIFIKASI"]);
-          const retentionYears = parseRetentionYears(row["RETENSI AKTIF"]);
+          const classification = sanitizeString(getValueByColumnName(rawRow, "KLASIFIKASI"));
+          const retentionYears = parseRetentionYears(getValueByColumnName(rawRow, "RETENSI AKTIF"));
 
           // Check retention mismatch if classification exists
           if (classification && !forceImport) {
@@ -159,11 +226,12 @@ export async function POST(req: Request) {
               !validateRetentionYear(classification, retentionYears)
             ) {
               retentionMismatches.push({
-                row: index + headerRowIndex + 2,
+                row: rowIndex + headerRowIndex + 2,
                 classification: classification,
                 currentRetention: retentionYears,
                 expectedRetention: rule.retentionYears,
                 ruleName: rule.name,
+                sheet: sheetName,
               });
             }
           }
@@ -193,58 +261,90 @@ export async function POST(req: Request) {
       if (!sheet) continue;
 
       const sheetData = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 });
-
-      const headerRowIndex = sheetData.findIndex((row) =>
-        row.some(
-          (cell) =>
-            typeof cell === "string" && cell.toUpperCase().includes("KODE UNIT")
-        )
-      );
+      const headerRowIndex = findHeaderRow(sheetData);
 
       if (headerRowIndex === -1) {
         continue;
       }
 
-      const rows = XLSX.utils.sheet_to_json(sheet, {
-        header: sheetData[headerRowIndex] as string[],
-        range: headerRowIndex + 1,
-        defval: "",
-      }) as any[];
+      // Ambil header dari baris yang ditemukan
+      const headers = sheetData[headerRowIndex];
+      // Normalisasi header untuk pencocokan case-insensitive
+      const normalizedHeaders = headers.map((header: any) => 
+        normalizeHeader(header?.toString() || '')
+      );
 
-      for (const [index, row] of rows.entries()) {
-        try {
-          // Skip baris yang hanya berisi angka/nomor urut
-          const isNumberedRow = Object.values(row).every((value) => {
-            if (value === null || value === undefined || value === "")
-              return false;
-            return !isNaN(Number(value)) && value.toString().trim() !== "";
+      // Function untuk mendapatkan nilai berdasarkan nama kolom
+      const getValueByColumnName = (row: any, ...columnNames: string[]): any => {
+        for (const columnName of columnNames) {
+          const normalizedSearch = normalizeHeader(columnName);
+          const columnIndex = normalizedHeaders.findIndex((header: string) => {
+            const normalizedHeader = normalizeHeader(header);
+            // Matching lebih fleksibel - hapus tanda kurung dan kata-kata dalam kurung
+            const cleanedHeader = normalizedHeader.replace(/\s*\([^)]*\)/g, '').trim();
+            const cleanedSearch = normalizedSearch.replace(/\s*\([^)]*\)/g, '').trim();
+            
+            return cleanedHeader.includes(cleanedSearch) || 
+                  cleanedSearch.includes(cleanedHeader) ||
+                  normalizedHeader.includes(normalizedSearch);
           });
+          
+          if (columnIndex !== -1) {
+            if (Array.isArray(row)) {
+              return row[columnIndex];
+            }
+            if (typeof row === 'object' && row !== null) {
+              const originalHeader = headers[columnIndex];
+              return row[originalHeader];
+            }
+          }
+        }
+        return undefined;
+      };
 
-          if (isNumberedRow) {
+      // Konversi data dari header row ke bawah
+      const rows = sheetData.slice(headerRowIndex + 1);
+
+      for (const [rowIndex, rawRow] of rows.entries()) {
+        try {
+          // Skip baris kosong
+          if (!rawRow || (Array.isArray(rawRow) && rawRow.every(cell => 
+            cell === null || cell === undefined || cell === '' || 
+            (typeof cell === 'string' && cell.trim() === '')
+          ))) {
             continue;
           }
 
+          // Skip baris yang hanya berisi angka/nomor urut
+          const isNumberedRow = Array.isArray(rawRow) && rawRow.every((value) => {
+            if (value === null || value === undefined || value === "") return false;
+            const str = value.toString().trim();
+            return !isNaN(Number(str)) && str !== "";
+          });
+
+          if (isNumberedRow) continue;
+
+          // Ambil nilai menggunakan nama kolom (case-insensitive)
+          const kodeUnit = getValueByColumnName(rawRow, "KODE UNIT");
+          const nomorSurat = getValueByColumnName(rawRow, "NOMOR SURAT");
+          const nomorNaskahDinas = getValueByColumnName(rawRow, "NOMOR NASKAH DINAS");
+          const perihal = getValueByColumnName(rawRow, "PERIHAL");
+
           // VALIDASI FLEKSIBEL
-          const hasNomorSurat =
-            row["NOMOR SURAT"] && row["NOMOR SURAT"].toString().trim() !== "";
-          const hasNomorNaskahDinas =
-            row["NOMOR NASKAH DINAS"] &&
-            row["NOMOR NASKAH DINAS"].toString().trim() !== "";
+          const hasNomorSurat = nomorSurat && nomorSurat.toString().trim() !== "";
+          const hasNomorNaskahDinas = nomorNaskahDinas && nomorNaskahDinas.toString().trim() !== "";
 
           if (
-            !row["KODE UNIT"] ||
+            !kodeUnit ||
             (!hasNomorSurat && !hasNomorNaskahDinas) ||
-            !row["PERIHAL"]
+            !perihal
           ) {
             throw new Error(
               "Kolom KODE UNIT, (NOMOR SURAT atau NOMOR NASKAH DINAS), dan PERIHAL wajib diisi"
             );
           }
 
-          const statusMap: Record<
-            string,
-            "ACTIVE" | "INACTIVE" | "DISPOSE_ELIGIBLE"
-          > = {
+          const statusMap: Record<string, "ACTIVE" | "INACTIVE" | "DISPOSE_ELIGIBLE"> = {
             ACTIVE: "ACTIVE",
             INACTIVE: "INACTIVE",
             DISPOSE_ELIGIBLE: "DISPOSE_ELIGIBLE",
@@ -299,47 +399,44 @@ export async function POST(req: Request) {
             return str === "" ? null : str;
           };
 
-          const classification = sanitizeString(row["KLASIFIKASI"]);
-          let retentionYears = parseRetentionYears(row["RETENTION YEARS"]);
+          const classification = sanitizeString(getValueByColumnName(rawRow, "KLASIFIKASI"));
+          let retentionYears = parseRetentionYears(getValueByColumnName(rawRow, "RETENSI AKTIF"));
 
-          // Auto-fix retention years if classification rule exists and forceImport is "fix"
-          if (classification && formData.get("autoFix") === "true") {
+          // Auto-fix retention years if classification rule exists and autoFix is enabled
+          if (classification && autoFix) {
             const rule = getClassificationRule(classification);
             if (rule) {
               retentionYears = rule.retentionYears;
             }
           }
 
-          // Create the archive data with proper validation
+          // Create the archive data dengan nama kolom yang tepat
           const archiveData = {
-            kodeUnit: sanitizeString(row["KODE UNIT"]) || "",
-            indeks: sanitizeString(row["INDEKS"]),
-            nomorBerkas: sanitizeString(row["NOMOR BERKAS"]),
-            judulBerkas: sanitizeString(row["JUDUL BERKAS"]),
-            nomorIsiBerkas: sanitizeString(row["NOMOR ISI BERKAS"]),
-            jenisNaskahDinas: sanitizeString(row["JENIS NASKAH DINAS"]),
+            kodeUnit: sanitizeString(kodeUnit) || "",
+            indeks: sanitizeString(getValueByColumnName(rawRow, "INDEKS")),
+            nomorBerkas: sanitizeString(getValueByColumnName(rawRow, "NOMOR BERKAS", "NO BOX SEMENTARA", "NOMOR DUS")) || "",
+            judulBerkas: sanitizeString(getValueByColumnName(rawRow, "JUDUL BERKAS")),
+            nomorIsiBerkas: sanitizeString(getValueByColumnName(rawRow, "NOMOR ISI BERKAS")),
+            jenisNaskahDinas: sanitizeString(getValueByColumnName(rawRow, "JENIS NASKAH DINAS")),
             klasifikasi: classification,
-            nomorSurat:
-              sanitizeString(row["NOMOR SURAT"]) ||
-              sanitizeString(row["NOMOR NASKAH DINAS"]) ||
-              "",
-            tanggal: parseExcelDateToISOString(row["TANGGAL"]),
-            perihal: sanitizeString(row["PERIHAL"]) || "",
-            tahun: row["TAHUN"]
-              ? parseInt(row["TAHUN"] as string)
-              : row["TANGGAL"]
-              ? new Date(row["TANGGAL"]).getFullYear()
+            nomorSurat: sanitizeString(nomorSurat) || sanitizeString(nomorNaskahDinas) || "",
+            tanggal: parseExcelDateToISOString(getValueByColumnName(rawRow, "TANGGAL")),
+            perihal: sanitizeString(perihal) || "",
+            tahun: getValueByColumnName(rawRow, "TAHUN")
+              ? parseInt(getValueByColumnName(rawRow, "TAHUN") as string)
+              : getValueByColumnName(rawRow, "TANGGAL")
+              ? new Date(getValueByColumnName(rawRow, "TANGGAL")).getFullYear()
               : null,
-            tingkatPerkembangan: sanitizeString(row["TINGKAT PERKEMBANGAN"]),
-            kondisi: sanitizeString(row["KONDISI"]),
-            lokasiSimpan: sanitizeString(row["LOKASI SIMPAN"]),
-            retensiAktif: sanitizeString(row["RETENSI AKTIF"]),
-            keterangan: sanitizeString(row["KETERANGAN"]),
+            tingkatPerkembangan: sanitizeString(getValueByColumnName(rawRow, "TINGKAT PERKEMBANGAN")),
+            kondisi: sanitizeString(getValueByColumnName(rawRow, "KONDISI")),
+            lokasiSimpan: sanitizeString(getValueByColumnName(rawRow, "LOKASI SIMPAN")),
+            retensiAktif: sanitizeString(getValueByColumnName(rawRow, "RETENSI AKTIF")),
+            keterangan: sanitizeString(getValueByColumnName(rawRow, "KETERANGAN")),
             entryDate: batchEntryDate,
             retentionYears: retentionYears,
             status:
-              row["STATUS"] && statusMap[row["STATUS"]?.toString()]
-                ? statusMap[row["STATUS"]?.toString()]
+              getValueByColumnName(rawRow, "STATUS") && statusMap[getValueByColumnName(rawRow, "STATUS")?.toString()]
+                ? statusMap[getValueByColumnName(rawRow, "STATUS")?.toString()]
                 : "ACTIVE",
             userId: userId,
           };
@@ -366,12 +463,12 @@ export async function POST(req: Request) {
           failed++;
           errors.push({
             sheet: sheetName,
-            row: index + headerRowIndex + 2,
+            row: rowIndex + headerRowIndex + 2,
             error: err.message || "Unknown error",
             data: {
-              kodeUnit: row["KODE UNIT"],
-              nomorSurat: row["NOMOR SURAT"] || row["NOMOR NASKAH DINAS"],
-              perihal: row["PERIHAL"],
+              kodeUnit: getValueByColumnName(rawRow, "KODE UNIT"),
+              nomorSurat: getValueByColumnName(rawRow, "NOMOR SURAT") || getValueByColumnName(rawRow, "NOMOR NASKAH DINAS"),
+              perihal: getValueByColumnName(rawRow, "PERIHAL"),
             },
           });
         }
