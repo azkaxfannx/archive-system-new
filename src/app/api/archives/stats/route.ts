@@ -52,26 +52,21 @@ export async function GET() {
     total: j._count.jenisNaskahDinas,
   }));
 
-  // Ambil semua arsip dengan nomorBerkas untuk menghitung box
-  const archivesWithNomorBerkas = await prisma.archive.findMany({
-    where: {
-      ...baseWhere,
-      nomorBerkas: {
-        not: null,
-      },
-    },
+  // Ambil semua arsip untuk menghitung box
+  const allArchives = await prisma.archive.findMany({
+    where: baseWhere,
     select: {
       nomorBerkas: true,
     },
   });
 
   // Parse nomorBerkas dan hitung box per kategori (dari prefix nomorBerkas)
-  const boxStats = archivesWithNomorBerkas.reduce((acc, archive) => {
+  const boxStats = allArchives.reduce((acc, archive) => {
+    let kategori = "UMUM";
+    let boxNum: number | null = null;
+
     if (archive.nomorBerkas) {
       const nomorBerkas = archive.nomorBerkas.trim();
-
-      let kategori = "UMUM";
-      let boxNum: number | null = null;
 
       // Cek jika nomorBerkas adalah angka langsung (1, 2, 3, dll)
       if (/^\d+$/.test(nomorBerkas)) {
@@ -94,17 +89,22 @@ export async function GET() {
           boxNum = parseInt(secondLastPart);
         }
       }
-
-      // Jika berhasil mendapatkan nomor box yang valid
-      if (boxNum && !isNaN(boxNum) && boxNum > 0) {
-        if (!acc[kategori]) {
-          acc[kategori] = new Set<number>();
-        }
-
-        // Tambahkan nomor box ke Set (unik)
-        acc[kategori].add(boxNum);
-      }
     }
+
+    // Jika berhasil mendapatkan nomor box yang valid
+    if (boxNum && !isNaN(boxNum) && boxNum > 0) {
+      if (!acc[kategori]) {
+        acc[kategori] = new Set<number>();
+      }
+
+      // Tambahkan nomor box ke Set (unik)
+      acc[kategori].add(boxNum);
+    }
+
+    // Jika nomorBerkas null/kosong atau tidak valid, tetap masuk kategori UMUM
+    // Tapi tidak menambahkan box karena tidak ada nomor box yang valid
+    // (Ini sesuai dengan logika sebelumnya)
+
     return acc;
   }, {} as Record<string, Set<number>>);
 
@@ -117,18 +117,22 @@ export async function GET() {
       totalBoxCount += totalBox;
 
       // Hitung total arsip untuk kategori ini
-      const totalArchives = archivesWithNomorBerkas.filter((archive) => {
-        if (!archive.nomorBerkas) return false;
+      const totalArchives = allArchives.filter((archive) => {
+        if (!archive.nomorBerkas) {
+          // Arsip tanpa nomorBerkas masuk kategori UMUM
+          return kategori === "UMUM";
+        }
 
         const nomorBerkas = archive.nomorBerkas.trim();
-        let archiveKategori = "UMUM";
 
         if (nomorBerkas.includes(".")) {
           const parts = nomorBerkas.split(".");
-          archiveKategori = parts[0];
+          const archiveKategori = parts[0];
+          return archiveKategori === kategori;
+        } else {
+          // Arsip dengan nomorBerkas tanpa titik masuk kategori UMUM
+          return kategori === "UMUM";
         }
-
-        return archiveKategori === kategori;
       }).length;
 
       return {

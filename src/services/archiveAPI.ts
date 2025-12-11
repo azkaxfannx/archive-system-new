@@ -249,6 +249,71 @@ export const archiveAPI = {
 
   // ========== SERAH TERIMA METHODS (UPDATED FOR MANY-TO-MANY) ==========
 
+  async processSerahTerima(
+    id: string,
+    data: {
+      approvedArchiveIds: string[];
+      rejectedArchiveIds: string[];
+      nomorBeritaAcara: string;
+      tanggalSerahTerima: string;
+      keterangan: string;
+      alasanPenolakan: string;
+    }
+  ): Promise<any> {
+    console.log("=== DEBUG FRONTEND API CALL ===");
+    console.log("Process ID:", id);
+    console.log("Data to send:", data);
+
+    const url = `/api/serah-terima/${id}/process`;
+    console.log("URL:", url);
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+
+      console.log("Response status:", res.status);
+      console.log("Response statusText:", res.statusText);
+
+      // Try to get response text first
+      const responseText = await res.text();
+      console.log("Raw response:", responseText);
+
+      let responseData;
+      try {
+        responseData = responseText ? JSON.parse(responseText) : {};
+        console.log("Parsed response:", responseData);
+      } catch (parseError) {
+        console.error("Failed to parse JSON:", parseError);
+        responseData = { error: "Invalid JSON response" };
+      }
+
+      if (!res.ok) {
+        console.error("API request failed:", {
+          status: res.status,
+          data: responseData,
+        });
+
+        throw {
+          response: {
+            data: responseData,
+            status: res.status,
+            statusText: res.statusText,
+          },
+          message:
+            responseData.error || `HTTP ${res.status}: ${res.statusText}`,
+        };
+      }
+      return responseData;
+    } catch (error) {
+      console.error("Fetch error in processSerahTerima:", error);
+      throw error;
+    }
+  },
+
   // UPDATED: Create usulan serah terima with multiple archives
   async createSerahTerimaUsulan(
     data: SerahTerimaUsulanFormData

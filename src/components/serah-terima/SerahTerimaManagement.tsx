@@ -12,8 +12,7 @@ import SuccessModal from "../ui/modal/SuccessModal";
 import SerahTerimaEditForm from "./SerahTerimaEditForm";
 import DeleteConfirmationModal from "./DeleteConfirmationModal";
 import SerahTerimaDetailModal from "../ui/modal/SerahTerimaDetailModal";
-import SerahTerimaApprovalForm from "./SerahTerimaApprovalForm";
-import SerahTerimaRejectModal from "./SerahTerimaRejectModal";
+import SerahTerimaProcessModal from "./SerahTerimaProcessModal";
 import SerahTerimaCreateForm from "./SerahTerimaCreateForm";
 
 export default function SerahTerimaManagement() {
@@ -45,12 +44,8 @@ export default function SerahTerimaManagement() {
   const [viewingItem, setViewingItem] = useState<SerahTerimaRecord | null>(
     null
   );
-  const [approvingItem, setApprovingItem] = useState<SerahTerimaRecord | null>(
-    null
-  );
-  const [rejectingItem, setRejectingItem] = useState<SerahTerimaRecord | null>(
-    null
-  );
+  const [processingItem, setProcessingItem] =
+    useState<SerahTerimaRecord | null>(null);
   const [editingItem, setEditingItem] = useState<SerahTerimaRecord | null>(
     null
   );
@@ -169,47 +164,34 @@ export default function SerahTerimaManagement() {
 
   const handleView = (item: SerahTerimaRecord) => setViewingItem(item);
 
-  const handleApprove = (item: SerahTerimaRecord) => setApprovingItem(item);
+  const handleProcess = (item: SerahTerimaRecord) => setProcessingItem(item);
 
-  const handleApproveConfirm = async (data: {
+  const handleProcessConfirm = async (data: {
+    approvedArchiveIds: string[];
+    rejectedArchiveIds: string[];
     nomorBeritaAcara: string;
     tanggalSerahTerima: string;
     keterangan: string;
+    alasanPenolakan: string;
   }) => {
-    if (!approvingItem) return;
+    if (!processingItem) return;
     try {
       setSaving(true);
-      await archiveAPI.approveSerahTerima(approvingItem.id, data);
+      const result = await archiveAPI.processSerahTerima(
+        processingItem.id,
+        data
+      );
       await fetchSerahTerima();
       await fetchStats();
       triggerHeaderRefresh();
-      setApprovingItem(null);
-      setSuccessMessage("Usulan serah terima berhasil disetujui.");
+      setProcessingItem(null);
+      setSuccessMessage(
+        `Usulan berhasil diproses: ${data.approvedArchiveIds.length} arsip disetujui, ${data.rejectedArchiveIds.length} arsip ditolak.`
+      );
       setShowSuccessModal(true);
     } catch (err: any) {
-      console.error("Error approving serah terima:", err);
-      alert(err.response?.data?.error || "Gagal menyetujui usulan");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleReject = (item: SerahTerimaRecord) => setRejectingItem(item);
-
-  const handleRejectConfirm = async (alasanPenolakan: string) => {
-    if (!rejectingItem) return;
-    try {
-      setSaving(true);
-      await archiveAPI.rejectSerahTerima(rejectingItem.id, alasanPenolakan);
-      await fetchSerahTerima();
-      await fetchStats();
-      triggerHeaderRefresh();
-      setRejectingItem(null);
-      setSuccessMessage("Usulan serah terima berhasil ditolak.");
-      setShowSuccessModal(true);
-    } catch (err: any) {
-      console.error("Error rejecting serah terima:", err);
-      alert(err.response?.data?.error || "Gagal menolak usulan");
+      console.error("Error processing serah terima:", err);
+      alert(err.response?.data?.error || "Gagal memproses usulan");
     } finally {
       setSaving(false);
     }
@@ -304,7 +286,6 @@ export default function SerahTerimaManagement() {
             });
           });
         } else {
-          // If no archives attached (shouldn't happen, but just in case)
           exportData.push({
             STATUS: item.statusUsulan,
             "PIHAK PENYERAH": item.pihakPenyerah,
@@ -347,12 +328,10 @@ export default function SerahTerimaManagement() {
 
   // Filter & sort
   const filteredData = serahTerima.filter((item) => {
-    // Status filter
     if (statusFilter && item.statusUsulan !== statusFilter) {
       return false;
     }
 
-    // Column filters
     const matchesFilters = Object.entries(columnFilters).every(
       ([column, value]) => {
         if (!value) return true;
@@ -366,7 +345,6 @@ export default function SerahTerimaManagement() {
       }
     );
 
-    // Period filters
     let matchesPeriod = true;
     if (periodFilters.year) {
       const year = new Date(item.tanggalUsulan).getFullYear();
@@ -391,7 +369,6 @@ export default function SerahTerimaManagement() {
     return 0;
   });
 
-  // Show loading while checking auth
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -409,7 +386,6 @@ export default function SerahTerimaManagement() {
       <Header refreshTrigger={headerRefreshTrigger} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Stats Cards */}
         <SerahTerimaStatsCards
           totalCount={stats.totalCount}
           pendingCount={stats.pendingCount}
@@ -419,13 +395,11 @@ export default function SerahTerimaManagement() {
           thisYearCount={stats.thisYearCount}
         />
 
-        {/* Table */}
         <SerahTerimaTable
           serahTerima={sortedData}
           loading={loading}
           onView={handleView}
-          onApprove={handleApprove}
-          onReject={handleReject}
+          onProcess={handleProcess}
           onEdit={handleEdit}
           onDelete={handleDelete}
           onSort={handleSort}
@@ -443,7 +417,6 @@ export default function SerahTerimaManagement() {
         />
       </main>
 
-      {/* Create Form */}
       {showCreateForm && (
         <SerahTerimaCreateForm
           onSave={handleSaveCreate}
@@ -452,7 +425,6 @@ export default function SerahTerimaManagement() {
         />
       )}
 
-      {/* Detail Modal */}
       {viewingItem && (
         <SerahTerimaDetailModal
           item={viewingItem}
@@ -460,27 +432,15 @@ export default function SerahTerimaManagement() {
         />
       )}
 
-      {/* Approval Form */}
-      {approvingItem && (
-        <SerahTerimaApprovalForm
-          item={approvingItem}
-          onApprove={handleApproveConfirm}
-          onCancel={() => setApprovingItem(null)}
+      {processingItem && (
+        <SerahTerimaProcessModal
+          item={processingItem}
+          onProcess={handleProcessConfirm}
+          onCancel={() => setProcessingItem(null)}
           loading={saving}
         />
       )}
 
-      {/* Reject Modal */}
-      {rejectingItem && (
-        <SerahTerimaRejectModal
-          item={rejectingItem}
-          onReject={handleRejectConfirm}
-          onCancel={() => setRejectingItem(null)}
-          loading={saving}
-        />
-      )}
-
-      {/* Edit Modal */}
       {editingItem && (
         <SerahTerimaEditForm
           item={editingItem}
@@ -490,7 +450,6 @@ export default function SerahTerimaManagement() {
         />
       )}
 
-      {/* Delete Confirmation Modal */}
       {deletingItem && (
         <DeleteConfirmationModal
           isOpen={!!deletingItem}
@@ -504,7 +463,6 @@ export default function SerahTerimaManagement() {
         />
       )}
 
-      {/* Success Modal */}
       <SuccessModal
         isOpen={showSuccessModal}
         message={successMessage}

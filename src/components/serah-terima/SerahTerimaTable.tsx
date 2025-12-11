@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronRight,
   Package,
+  Settings,
 } from "lucide-react";
 import { SerahTerimaRecord } from "@/types/archive";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
@@ -32,8 +33,7 @@ interface SerahTerimaTableProps {
   serahTerima: SerahTerimaRecord[];
   loading: boolean;
   onView: (serahTerima: SerahTerimaRecord) => void;
-  onApprove: (serahTerima: SerahTerimaRecord) => void;
-  onReject: (serahTerima: SerahTerimaRecord) => void;
+  onProcess: (serahTerima: SerahTerimaRecord) => void;
   onEdit: (serahTerima: SerahTerimaRecord) => void;
   onDelete: (serahTerima: SerahTerimaRecord) => void;
   onSort: (field: string) => void;
@@ -81,8 +81,7 @@ export default function SerahTerimaTable({
   serahTerima,
   loading,
   onView,
-  onApprove,
-  onReject,
+  onProcess,
   onEdit,
   onDelete,
   onSort,
@@ -259,7 +258,6 @@ export default function SerahTerimaTable({
         </div>
 
         <div className="flex items-center space-x-2">
-          {/* Add Button */}
           <button
             onClick={onAdd}
             className="px-3 py-1.5 text-sm rounded bg-purple-600 text-white hover:bg-purple-700 transition-colors"
@@ -267,7 +265,6 @@ export default function SerahTerimaTable({
             + Tambah Serah Terima
           </button>
 
-          {/* Export Button */}
           <button
             onClick={onExport}
             disabled={isExporting}
@@ -283,7 +280,6 @@ export default function SerahTerimaTable({
             )}
           </button>
 
-          {/* Toggle Period Filter */}
           <button
             onClick={() => setShowPeriodFilters(!showPeriodFilters)}
             className={`text-sm flex items-center transition-colors px-3 py-1.5 rounded ${
@@ -296,7 +292,6 @@ export default function SerahTerimaTable({
             {showPeriodFilters ? "Sembunyikan" : "Filter"} Periode
           </button>
 
-          {/* Toggle Column Filter */}
           <button
             onClick={() => setShowFilters(!showFilters)}
             className="text-sm text-purple-600 hover:text-purple-800 flex items-center transition-colors"
@@ -574,22 +569,13 @@ export default function SerahTerimaTable({
                       </button>
 
                       {item.statusUsulan === "PENDING" && (
-                        <>
-                          <button
-                            onClick={() => onApprove(item)}
-                            className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
-                            title="Setujui"
-                          >
-                            <CheckCircle size={16} />
-                          </button>
-                          <button
-                            onClick={() => onReject(item)}
-                            className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
-                            title="Tolak"
-                          >
-                            <XCircle size={16} />
-                          </button>
-                        </>
+                        <button
+                          onClick={() => onProcess(item)}
+                          className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
+                          title="Proses Usulan"
+                        >
+                          <Settings size={16} />
+                        </button>
                       )}
 
                       {item.statusUsulan === "APPROVED" && (
