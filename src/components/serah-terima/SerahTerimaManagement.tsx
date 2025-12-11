@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Header from "../layout/Header";
 import SerahTerimaStatsCards from "../ui/SerahTerimaStatsCards";
 import SerahTerimaTable from "./SerahTerimaTable";
-import { SerahTerimaRecord } from "@/types/archive";
+import { SerahTerimaRecord, SerahTerimaUsulanFormData } from "@/types/archive";
 import { archiveAPI } from "@/services/archiveAPI";
 import * as XLSX from "xlsx";
 import SuccessModal from "../ui/modal/SuccessModal";
@@ -13,13 +14,20 @@ import DeleteConfirmationModal from "./DeleteConfirmationModal";
 import SerahTerimaDetailModal from "../ui/modal/SerahTerimaDetailModal";
 import SerahTerimaApprovalForm from "./SerahTerimaApprovalForm";
 import SerahTerimaRejectModal from "./SerahTerimaRejectModal";
+import SerahTerimaCreateForm from "./SerahTerimaCreateForm";
 
 export default function SerahTerimaManagement() {
+  const router = useRouter();
+  const [user, setUser] = useState<any | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
   const [serahTerima, setSerahTerima] = useState<SerahTerimaRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortField, setSortField] = useState<string>("tanggalUsulan");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>(
+    {}
+  );
   const [isExporting, setIsExporting] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
 
@@ -33,11 +41,22 @@ export default function SerahTerimaManagement() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   // Modals
-  const [viewingItem, setViewingItem] = useState<SerahTerimaRecord | null>(null);
-  const [approvingItem, setApprovingItem] = useState<SerahTerimaRecord | null>(null);
-  const [rejectingItem, setRejectingItem] = useState<SerahTerimaRecord | null>(null);
-  const [editingItem, setEditingItem] = useState<SerahTerimaRecord | null>(null);
-  const [deletingItem, setDeletingItem] = useState<SerahTerimaRecord | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [viewingItem, setViewingItem] = useState<SerahTerimaRecord | null>(
+    null
+  );
+  const [approvingItem, setApprovingItem] = useState<SerahTerimaRecord | null>(
+    null
+  );
+  const [rejectingItem, setRejectingItem] = useState<SerahTerimaRecord | null>(
+    null
+  );
+  const [editingItem, setEditingItem] = useState<SerahTerimaRecord | null>(
+    null
+  );
+  const [deletingItem, setDeletingItem] = useState<SerahTerimaRecord | null>(
+    null
+  );
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -53,6 +72,52 @@ export default function SerahTerimaManagement() {
     thisMonthCount: 0,
     thisYearCount: 0,
   });
+
+  // Auth check
+  const checkAuthStatus = async () => {
+    try {
+      setAuthLoading(true);
+      const response = await fetch("/api/auth/me", {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.user) {
+          setUser(data.user);
+          return true;
+        } else {
+          throw new Error("No user data received");
+        }
+      } else {
+        throw new Error(
+          `Authentication failed with status: ${response.status}`
+        );
+      }
+    } catch (error) {
+      console.error("Auth check failed:", error);
+      setUser(null);
+      router.push("/login");
+      return false;
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const initializeComponent = async () => {
+      const isAuthenticated = await checkAuthStatus();
+      if (isAuthenticated) {
+        fetchSerahTerima();
+        fetchStats();
+      }
+    };
+    initializeComponent();
+  }, []);
 
   const fetchStats = async () => {
     try {
@@ -78,10 +143,29 @@ export default function SerahTerimaManagement() {
     }
   };
 
-  useEffect(() => {
-    fetchSerahTerima();
-    fetchStats();
-  }, []);
+  const handleCreate = () => {
+    setShowCreateForm(true);
+  };
+
+  const handleSaveCreate = async (data: SerahTerimaUsulanFormData) => {
+    try {
+      setSaving(true);
+      await archiveAPI.createSerahTerimaUsulan(data);
+      await fetchSerahTerima();
+      await fetchStats();
+      triggerHeaderRefresh();
+      setShowCreateForm(false);
+      setSuccessMessage(
+        `Usulan serah terima untuk ${data.archiveIds.length} arsip berhasil dibuat.`
+      );
+      setShowSuccessModal(true);
+    } catch (err: any) {
+      console.error("Error creating serah terima:", err);
+      alert(err.message || "Gagal membuat usulan serah terima");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleView = (item: SerahTerimaRecord) => setViewingItem(item);
 
@@ -193,22 +277,56 @@ export default function SerahTerimaManagement() {
     setIsExporting(true);
     try {
       const allSerahTerima = await archiveAPI.getAllSerahTerima();
-      const worksheet = XLSX.utils.json_to_sheet(
-        allSerahTerima.map((item: SerahTerimaRecord) => ({
-          STATUS: item.statusUsulan,
-          "PIHAK PENYERAH": item.pihakPenyerah,
-          "PIHAK PENERIMA": item.pihakPenerima,
-          "TANGGAL USULAN": new Date(item.tanggalUsulan).toLocaleDateString("id-ID"),
-          "NOMOR BERKAS": item.archive?.nomorBerkas || "-",
-          "JUDUL BERKAS": item.archive?.judulBerkas || "-",
-          "NOMOR BERITA ACARA": item.nomorBeritaAcara || "-",
-          "TANGGAL SERAH TERIMA": item.tanggalSerahTerima
-            ? new Date(item.tanggalSerahTerima).toLocaleDateString("id-ID")
-            : "-",
-          KETERANGAN: item.keterangan || "-",
-          "ALASAN PENOLAKAN": item.alasanPenolakan || "-",
-        }))
-      );
+
+      // Flatten data for export (one row per archive)
+      const exportData: any[] = [];
+
+      allSerahTerima.forEach((item: SerahTerimaRecord) => {
+        if (item.archives && item.archives.length > 0) {
+          item.archives.forEach((sta) => {
+            exportData.push({
+              STATUS: item.statusUsulan,
+              "PIHAK PENYERAH": item.pihakPenyerah,
+              "PIHAK PENERIMA": item.pihakPenerima,
+              "NOMOR BERKAS": item.nomorBerkas,
+              "TANGGAL USULAN": new Date(item.tanggalUsulan).toLocaleDateString(
+                "id-ID"
+              ),
+              "NOMOR SURAT": sta.archive?.nomorSurat || "-",
+              "JUDUL BERKAS": sta.archive?.judulBerkas || "-",
+              PERIHAL: sta.archive?.perihal || "-",
+              "NOMOR BERITA ACARA": item.nomorBeritaAcara || "-",
+              "TANGGAL SERAH TERIMA": item.tanggalSerahTerima
+                ? new Date(item.tanggalSerahTerima).toLocaleDateString("id-ID")
+                : "-",
+              KETERANGAN: item.keterangan || "-",
+              "ALASAN PENOLAKAN": item.alasanPenolakan || "-",
+            });
+          });
+        } else {
+          // If no archives attached (shouldn't happen, but just in case)
+          exportData.push({
+            STATUS: item.statusUsulan,
+            "PIHAK PENYERAH": item.pihakPenyerah,
+            "PIHAK PENERIMA": item.pihakPenerima,
+            "NOMOR BERKAS": item.nomorBerkas,
+            "TANGGAL USULAN": new Date(item.tanggalUsulan).toLocaleDateString(
+              "id-ID"
+            ),
+            "NOMOR SURAT": "-",
+            "JUDUL BERKAS": "-",
+            PERIHAL: "-",
+            "NOMOR BERITA ACARA": item.nomorBeritaAcara || "-",
+            "TANGGAL SERAH TERIMA": item.tanggalSerahTerima
+              ? new Date(item.tanggalSerahTerima).toLocaleDateString("id-ID")
+              : "-",
+            KETERANGAN: item.keterangan || "-",
+            "ALASAN PENOLAKAN": item.alasanPenolakan || "-",
+          });
+        }
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "SerahTerima");
       XLSX.writeFile(workbook, "data_serah_terima.xlsx");
@@ -238,10 +356,8 @@ export default function SerahTerimaManagement() {
     const matchesFilters = Object.entries(columnFilters).every(
       ([column, value]) => {
         if (!value) return true;
-        if (column === "judulBerkas") {
-          return item.archive?.judulBerkas
-            ?.toLowerCase()
-            .includes(value.toLowerCase());
+        if (column === "nomorBerkas") {
+          return item.nomorBerkas?.toLowerCase().includes(value.toLowerCase());
         }
         const fieldValue = (item as any)[column];
         return fieldValue
@@ -268,18 +384,25 @@ export default function SerahTerimaManagement() {
   });
 
   const sortedData = [...filteredData].sort((a, b) => {
-    const aValue =
-      sortField === "judulBerkas"
-        ? a.archive?.judulBerkas || ""
-        : (a as any)[sortField] || "";
-    const bValue =
-      sortField === "judulBerkas"
-        ? b.archive?.judulBerkas || ""
-        : (b as any)[sortField] || "";
+    const aValue = (a as any)[sortField] || "";
+    const bValue = (b as any)[sortField] || "";
     if (aValue < bValue) return sortOrder === "asc" ? -1 : 1;
     if (aValue > bValue) return sortOrder === "asc" ? 1 : -1;
     return 0;
   });
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -311,6 +434,7 @@ export default function SerahTerimaManagement() {
           onColumnFilter={handleColumnFilter}
           columnFilters={columnFilters}
           onExport={handleExport}
+          onAdd={handleCreate}
           isExporting={isExporting}
           periodFilters={periodFilters}
           onPeriodFilterChange={handlePeriodFilterChange}
@@ -318,6 +442,15 @@ export default function SerahTerimaManagement() {
           onStatusFilterChange={setStatusFilter}
         />
       </main>
+
+      {/* Create Form */}
+      {showCreateForm && (
+        <SerahTerimaCreateForm
+          onSave={handleSaveCreate}
+          onCancel={() => setShowCreateForm(false)}
+          loading={saving}
+        />
+      )}
 
       {/* Detail Modal */}
       {viewingItem && (
@@ -364,8 +497,10 @@ export default function SerahTerimaManagement() {
           onClose={() => setDeletingItem(null)}
           onConfirm={confirmDelete}
           loading={deleting}
-          nomorBeritaAcara={deletingItem.nomorBeritaAcara || deletingItem.pihakPenyerah}
-          judulBerkas={deletingItem.archive?.judulBerkas}
+          nomorBeritaAcara={
+            deletingItem.nomorBeritaAcara || deletingItem.nomorBerkas
+          }
+          judulBerkas={`${deletingItem.archives?.length || 0} arsip`}
         />
       )}
 

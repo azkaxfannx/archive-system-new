@@ -28,8 +28,6 @@ import ImportResultModal from "../ui/modal/ImportResultModal";
 import DeleteConfirmationModal from "../ui/modal/DeleteConfirmationModal";
 import RetentionMismatchModal from "../ui/modal/RetentionMismatchModal";
 import PeminjamanErrorModal from "../ui/modal/PeminjamanErrorModal";
-import SerahTerimaForm from "@/components/serah-terima/SerahTerimaForm";
-import { SerahTerimaFormData } from "@/types/archive";
 
 interface BoxStats {
   kategori: string;
@@ -63,35 +61,26 @@ export default function ArchiveManagement() {
   const [user, setUser] = useState<any | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // NEW: State for retention mismatch handling
+  // Retention mismatch handling
   const [retentionMismatches, setRetentionMismatches] = useState<any[]>([]);
   const [showRetentionMismatchModal, setShowRetentionMismatchModal] =
     useState(false);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
 
-  const [serahTerimaArchive, setSerahTerimaArchive] =
-    useState<ArchiveRecord | null>(null);
-  const [savingSerahTerima, setSavingSerahTerima] = useState(false);
-
-  // FIXED: Use cookie-based authentication like in HomePage
+  // Auth check
   const checkAuthStatus = async () => {
     try {
       setAuthLoading(true);
-
       const response = await fetch("/api/auth/me", {
         method: "GET",
-        credentials: "include", // Include cookies
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
       });
 
-      console.log("ArchiveManagement auth check response:", response.status);
-
       if (response.ok) {
         const data = await response.json();
-        console.log("ArchiveManagement auth data:", data);
-
         if (data.user) {
           setUser(data.user);
           return true;
@@ -113,33 +102,21 @@ export default function ArchiveManagement() {
     }
   };
 
-  const fetchLastUpdate = async () => {
-    // This function can remain as is, since it's just for display
-  };
-
-  // Modified useEffect with proper auth check
   useEffect(() => {
     const initializeComponent = async () => {
-      const isAuthenticated = await checkAuthStatus();
-
-      if (isAuthenticated) {
-        fetchLastUpdate();
-        const interval = setInterval(fetchLastUpdate, 30000);
-        return () => clearInterval(interval);
-      }
+      await checkAuthStatus();
     };
-
     initializeComponent();
   }, []);
 
-  // New state for period and year filters
+  // Period filters
   const [periodFilters, setPeriodFilters] = useState({
     startMonth: "",
     endMonth: "",
     year: "",
   });
 
-  // Count states
+  // Stats
   const [stats, setStats] = useState<StatsData>({
     totalCount: 0,
     activeCount: 0,
@@ -153,7 +130,7 @@ export default function ArchiveManagement() {
   useEffect(() => {
     if (user) {
       fetch("/api/archives/stats", {
-        credentials: "include", // FIXED: Add credentials for cookie-based auth
+        credentials: "include",
       })
         .then((res) => res.json())
         .then((data) => setStats(data))
@@ -189,7 +166,7 @@ export default function ArchiveManagement() {
     useState(false);
   const [peminjamanErrorMessage, setPeminjamanErrorMessage] = useState("");
 
-  // Fetch archives with period filters
+  // UPDATED: Fetch archives excluding those with approved serah terima
   const { archives, pagination, loading, error, mutate } = useArchives({
     page: currentPage,
     limit: itemsPerPage,
@@ -201,6 +178,7 @@ export default function ArchiveManagement() {
     startMonth: periodFilters.startMonth,
     endMonth: periodFilters.endMonth,
     year: periodFilters.year,
+    excludeSerahTerima: true, // NEW: Exclude archives with approved serah terima
   });
 
   // Header refresh trigger
@@ -228,28 +206,14 @@ export default function ArchiveManagement() {
     setCurrentPage(1);
   };
 
-  // FIXED: Proper bidirectional sorting handler
   const handleSort = (field: string) => {
-    console.log("Current sort state:", {
-      sortField,
-      sortOrder,
-      clickedField: field,
-    });
-
     if (sortField === field) {
       const newOrder = sortOrder === "asc" ? "desc" : "asc";
       setSortOrder(newOrder);
-      console.log("Toggling sort order to:", newOrder);
     } else {
       setSortField(field);
       const defaultOrder = field === "tanggal" ? "desc" : "asc";
       setSortOrder(defaultOrder);
-      console.log(
-        "Setting new sort field:",
-        field,
-        "with default",
-        defaultOrder
-      );
     }
   };
 
@@ -257,7 +221,6 @@ export default function ArchiveManagement() {
     new Date().toLocaleString("id-ID")
   );
 
-  // IMPROVED: Column filter handler
   const handleColumnFilter = (column: string, value: string) => {
     setColumnFilters((prev) => ({
       ...prev,
@@ -266,7 +229,6 @@ export default function ArchiveManagement() {
     setCurrentPage(1);
   };
 
-  // Define interface for archive data
   interface ArchiveData {
     kodeUnit?: string;
     indeks?: string;
@@ -297,6 +259,7 @@ export default function ArchiveManagement() {
         status: selectedFilter,
         sort: sortField,
         order: sortOrder,
+        excludeSerahTerima: "true", // NEW: Exclude from export too
         ...(periodFilters.year && { year: periodFilters.year }),
         ...(periodFilters.startMonth && {
           startMonth: periodFilters.startMonth,
@@ -313,7 +276,6 @@ export default function ArchiveManagement() {
       const result = await response.json();
       const allArchives: ArchiveData[] = result.data || [];
 
-      // Guard clause for empty data
       if (allArchives.length === 0) {
         setExportResult({
           fileName: "Tidak ada data untuk diekspor",
@@ -323,11 +285,9 @@ export default function ArchiveManagement() {
         return;
       }
 
-      // Create workbook and worksheet
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Data Arsip");
 
-      // Define headers
       const headers = [
         "KODE UNIT",
         "INDEKS",
@@ -349,10 +309,8 @@ export default function ArchiveManagement() {
         "STATUS",
       ];
 
-      // Add header row
       worksheet.addRow(headers);
 
-      // Add data rows
       allArchives.forEach((archive: ArchiveData) => {
         worksheet.addRow([
           archive.kodeUnit || "",
@@ -378,14 +336,13 @@ export default function ArchiveManagement() {
         ]);
       });
 
-      // Style header row
       const headerRow = worksheet.getRow(1);
       headerRow.height = 25;
       headerRow.eachCell((cell) => {
         cell.fill = {
           type: "pattern",
           pattern: "solid",
-          fgColor: { argb: "FFE8F4FD" }, // Light blue background
+          fgColor: { argb: "FFE8F4FD" },
         };
         cell.font = {
           name: "Arial",
@@ -405,7 +362,6 @@ export default function ArchiveManagement() {
         };
       });
 
-      // Style data rows
       for (let i = 2; i <= worksheet.rowCount; i++) {
         const row = worksheet.getRow(i);
         row.height = 20;
@@ -428,15 +384,12 @@ export default function ArchiveManagement() {
         });
       }
 
-      // Set column widths manually based on content
       const columnWidths = [
         15, 10, 15, 25, 18, 20, 15, 15, 15, 25, 20, 12, 15, 15, 15, 20, 15, 12,
       ];
 
       headers.forEach((header, index) => {
         const column = worksheet.getColumn(index + 1);
-
-        // Calculate max width by checking all cells in this column
         let maxWidth = header.length;
 
         for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex++) {
@@ -445,7 +398,6 @@ export default function ArchiveManagement() {
           maxWidth = Math.max(maxWidth, cellValue.length);
         }
 
-        // Set width with reasonable bounds
         const finalWidth = Math.min(
           Math.max(maxWidth + 2, columnWidths[index] || 15),
           50
@@ -453,7 +405,6 @@ export default function ArchiveManagement() {
         column.width = finalWidth;
       });
 
-      // Generate filename
       let periodInfo = "";
       if (periodFilters.year) {
         periodInfo += `-${periodFilters.year}`;
@@ -465,13 +416,11 @@ export default function ArchiveManagement() {
         new Date().toISOString().split("T")[0]
       }.xlsx`;
 
-      // Write file
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
 
-      // Download file
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -490,12 +439,10 @@ export default function ArchiveManagement() {
     }
   };
 
-  // UPDATED: Enhanced import handler with retention mismatch handling
   const handleImport = async (file: File) => {
     try {
       setPendingImportFile(file);
 
-      // First attempt without forcing
       const formData = new FormData();
       formData.append("file", file);
 
@@ -507,7 +454,6 @@ export default function ArchiveManagement() {
 
       const result = await response.json();
 
-      // Check if there are retention mismatches
       if (result.hasRetentionMismatches) {
         setRetentionMismatches(result.retentionMismatches);
         setShowRetentionMismatchModal(true);
@@ -515,7 +461,6 @@ export default function ArchiveManagement() {
         return;
       }
 
-      // Normal import result
       setImportResult(result);
       setShowImportResultModal(true);
       mutate();
@@ -532,7 +477,6 @@ export default function ArchiveManagement() {
     }
   };
 
-  // NEW: Handle fix all retention mismatches
   const handleFixAllRetention = async () => {
     if (!pendingImportFile) return;
 
@@ -574,7 +518,6 @@ export default function ArchiveManagement() {
     }
   };
 
-  // NEW: Handle continue anyway with retention mismatches
   const handleContinueAnywayRetention = async () => {
     if (!pendingImportFile) return;
 
@@ -630,7 +573,7 @@ export default function ArchiveManagement() {
       setSelectedArchive(null);
       mutate();
       fetch("/api/archives/stats", {
-        credentials: "include", // FIXED: Add credentials
+        credentials: "include",
       })
         .then((res) => res.json())
         .then((data) => setStats(data));
@@ -652,7 +595,6 @@ export default function ArchiveManagement() {
   const handleSavePeminjaman = async (formData: PeminjamanFormData) => {
     setIsLoading(true);
     try {
-      console.log("Creating peminjaman with data:", formData);
       await archiveAPI.createPeminjaman(formData);
       setSuccessMessage("Peminjaman berkas berhasil dibuat!");
 
@@ -670,7 +612,6 @@ export default function ArchiveManagement() {
       );
 
       if (isConflictError && isDuplicateNomorSurat) {
-        console.log("Showing peminjaman error modal");
         setPeminjamanErrorMessage(
           "Nomor surat ini masih digunakan untuk peminjaman yang belum dikembalikan. " +
             "Silakan gunakan nomor surat yang berbeda atau tunggu hingga peminjaman sebelumnya dikembalikan."
@@ -686,31 +627,6 @@ export default function ArchiveManagement() {
     }
   };
 
-  const handleSerahTerima = (archive: ArchiveRecord) => {
-    setSerahTerimaArchive(archive);
-  };
-
-  const handleSaveSerahTerima = async (data: SerahTerimaFormData) => {
-    try {
-      setSavingSerahTerima(true);
-      await archiveAPI.createSerahTerima(data);
-      await mutate();
-      setSerahTerimaArchive(null);
-
-      setSuccessMessage("Berkas berhasil diserahterimakan.");
-      setShowSuccessModal(true);
-    } catch (err: any) {
-      console.error("Error creating serah terima:", err);
-      alert(err.message || "Gagal menyerahterimakan berkas");
-    } finally {
-      setSavingSerahTerima(false);
-    }
-  };
-
-  const handleCancelSerahTerima = () => {
-    setSerahTerimaArchive(null);
-  };
-
   // Show loading while checking auth
   if (authLoading) {
     return (
@@ -720,18 +636,15 @@ export default function ArchiveManagement() {
     );
   }
 
-  // Don't render anything if user is not authenticated
   if (!user) {
     return null;
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <Header refreshTrigger={headerRefreshTrigger} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Stats Cards */}
         <StatsCards
           totalCount={stats.totalCount}
           activeCount={stats.activeCount}
@@ -744,7 +657,7 @@ export default function ArchiveManagement() {
           columnFilters={columnFilters}
         />
 
-        {/* Archive Table */}
+        {/* REMOVED: Serah Terima button from table */}
         <ArchiveTable
           archives={archives}
           loading={loading}
@@ -761,7 +674,6 @@ export default function ArchiveManagement() {
             setShowDetailModal(true);
           }}
           onPinjam={(archive) => handlePinjamArchive(archive)}
-          onSerahTerima={handleSerahTerima}
           onSort={handleSort}
           sortField={sortField}
           sortOrder={sortOrder}
@@ -778,13 +690,11 @@ export default function ArchiveManagement() {
           refreshTrigger={tableRefreshTrigger}
         />
 
-        {/* Pagination */}
         {pagination && (
           <Pagination pagination={pagination} onPageChange={setCurrentPage} />
         )}
       </main>
 
-      {/* Delete Confirmation Modal */}
       <DeleteConfirmationModal
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
@@ -793,7 +703,7 @@ export default function ArchiveManagement() {
             await archiveAPI.deleteArchive(deleteId);
             mutate();
             fetch("/api/archives/stats", {
-              credentials: "include", // FIXED: Add credentials
+              credentials: "include",
             })
               .then((res) => res.json())
               .then((data) => setStats(data));
@@ -804,7 +714,6 @@ export default function ArchiveManagement() {
         }}
       />
 
-      {/* Archive Form Modal */}
       {showAddForm && (
         <ArchiveForm
           archive={selectedArchive || undefined}
@@ -814,7 +723,6 @@ export default function ArchiveManagement() {
         />
       )}
 
-      {/* Import Modal */}
       {showImportModal && (
         <ImportModal
           onClose={() => setShowImportModal(false)}
@@ -822,7 +730,6 @@ export default function ArchiveManagement() {
         />
       )}
 
-      {/* NEW: Retention Mismatch Modal */}
       <RetentionMismatchModal
         isOpen={showRetentionMismatchModal}
         onClose={() => {
@@ -836,21 +743,18 @@ export default function ArchiveManagement() {
         isLoading={isLoading}
       />
 
-      {/* Export Result Modal */}
       <ExportResultModal
         isOpen={showExportResultModal}
         onClose={() => setShowExportResultModal(false)}
         result={exportResult}
       />
 
-      {/* Import Result Modal */}
       <ImportResultModal
         isOpen={showImportResultModal}
         onClose={() => setShowImportResultModal(false)}
         result={importResult}
       />
 
-      {/* Detail Modal */}
       {showDetailModal && selectedArchive && (
         <ArchiveDetailModal
           archive={selectedArchive}
@@ -859,7 +763,6 @@ export default function ArchiveManagement() {
         />
       )}
 
-      {/* Peminjaman Form Modal */}
       {showPeminjamanForm && selectedArchive && (
         <PeminjamanForm
           archive={selectedArchive}
@@ -869,29 +772,17 @@ export default function ArchiveManagement() {
         />
       )}
 
-      {/* Success Modal */}
       <SuccessModal
         isOpen={showSuccessModal}
         message={successMessage}
         onClose={() => setShowSuccessModal(false)}
       />
 
-      {/* Peminjaman Error Modal */}
       <PeminjamanErrorModal
         isOpen={showPeminjamanErrorModal}
         onClose={() => setShowPeminjamanErrorModal(false)}
         message={peminjamanErrorMessage}
       />
-
-      {/* Serah Terima Form Modal */}
-      {serahTerimaArchive && (
-        <SerahTerimaForm
-          archive={serahTerimaArchive}
-          onSave={handleSaveSerahTerima}
-          onCancel={handleCancelSerahTerima}
-          loading={savingSerahTerima}
-        />
-      )}
     </div>
   );
 }

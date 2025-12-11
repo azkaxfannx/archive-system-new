@@ -9,21 +9,35 @@ export async function GET(request: NextRequest) {
     if (error) return error;
 
     const whereClause =
-      user.role === "ADMIN" ? {} : { archive: { userId: user.userId } };
+      user.role === "ADMIN"
+        ? {}
+        : {
+            archives: {
+              some: {
+                archive: {
+                  userId: user.userId,
+                },
+              },
+            },
+          };
 
     const serahTerimaList = await prisma.serahTerima.findMany({
       where: whereClause,
       include: {
-        archive: {
-          select: {
-            id: true,
-            judulBerkas: true,
-            nomorBerkas: true,
-            klasifikasi: true,
-            nomorSurat: true,
-            perihal: true,
-            tanggal: true,
-            lokasiSimpan: true,
+        archives: {
+          include: {
+            archive: {
+              select: {
+                id: true,
+                judulBerkas: true,
+                nomorBerkas: true,
+                klasifikasi: true,
+                nomorSurat: true,
+                perihal: true,
+                tanggal: true,
+                lokasiSimpan: true,
+              },
+            },
           },
         },
       },
@@ -46,7 +60,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create usulan serah terima
+// POST - Create usulan serah terima with multiple archives
 export async function POST(request: NextRequest) {
   try {
     const { user, error } = requireAuth(request);
@@ -55,84 +69,138 @@ export async function POST(request: NextRequest) {
     const data = await request.json();
 
     // Validate required fields
-    if (!data.pihakPenyerah || !data.pihakPenerima || !data.archiveId) {
+    if (
+      !data.pihakPenyerah ||
+      !data.pihakPenerima ||
+      !data.nomorBerkas ||
+      !data.archiveIds ||
+      data.archiveIds.length === 0
+    ) {
       return NextResponse.json(
         {
           success: false,
-          error: "Pihak penyerah, pihak penerima, dan arsip wajib diisi",
+          error:
+            "Pihak penyerah, pihak penerima, nomor berkas, dan minimal 1 arsip wajib dipilih",
         },
         { status: 400 }
       );
     }
 
-    // Check if archive exists and user has access
-    const archive = await prisma.archive.findUnique({
-      where: { id: data.archiveId },
-      include: { serahTerima: true, peminjaman: true },
+    // Validate archives exist and belong to the same nomorBerkas
+    const archives = await prisma.archive.findMany({
+      where: {
+        id: { in: data.archiveIds },
+      },
+      include: {
+        serahTerimaArchives: {
+          include: {
+            serahTerima: true,
+          },
+        },
+        peminjaman: {
+          where: {
+            tanggalPengembalian: null,
+          },
+        },
+      },
     });
 
-    if (!archive) {
+    if (archives.length !== data.archiveIds.length) {
       return NextResponse.json(
         {
           success: false,
-          error: "Arsip tidak ditemukan",
+          error: "Beberapa arsip tidak ditemukan",
         },
         { status: 404 }
       );
     }
 
     // Check user access
-    if (user.role !== "ADMIN" && archive.userId !== user.userId) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden" },
-        { status: 403 }
+    if (user.role !== "ADMIN") {
+      const hasUnauthorizedArchive = archives.some(
+        (a) => a.userId !== user.userId
       );
+      if (hasUnauthorizedArchive) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden" },
+          { status: 403 }
+        );
+      }
     }
 
-    // Check if already has serah terima
-    if (archive.serahTerima) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Arsip ini sudah memiliki usulan serah terima",
-        },
-        { status: 400 }
-      );
-    }
-
-    // Check if being borrowed
-    const activePeminjaman = archive.peminjaman.find(
-      (p) => !p.tanggalPengembalian
+    // Check if all archives have the same nomorBerkas
+    const allSameNomorBerkas = archives.every(
+      (a) => a.nomorBerkas === data.nomorBerkas
     );
-    if (activePeminjaman) {
+    if (!allSameNomorBerkas) {
       return NextResponse.json(
         {
           success: false,
-          error: "Arsip sedang dipinjam dan tidak dapat diusulkan",
+          error: "Semua arsip harus memiliki nomor berkas yang sama",
         },
         { status: 400 }
       );
     }
 
-    // Create usulan serah terima
+    // Check if any archive already has serah terima
+    const archiveWithSerahTerima = archives.find((a) =>
+      a.serahTerimaArchives.some(
+        (sta) =>
+          sta.serahTerima.statusUsulan === "PENDING" ||
+          sta.serahTerima.statusUsulan === "APPROVED"
+      )
+    );
+
+    if (archiveWithSerahTerima) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Arsip "${archiveWithSerahTerima.judulBerkas}" sudah memiliki usulan serah terima`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Check if any archive is being borrowed
+    const borrowedArchive = archives.find((a) => a.peminjaman.length > 0);
+    if (borrowedArchive) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Arsip "${borrowedArchive.judulBerkas}" sedang dipinjam dan tidak dapat diusulkan`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Create serah terima with multiple archives
     const serahTerima = await prisma.serahTerima.create({
       data: {
         pihakPenyerah: data.pihakPenyerah,
         pihakPenerima: data.pihakPenerima,
-        archiveId: data.archiveId,
+        nomorBerkas: data.nomorBerkas,
         statusUsulan: "PENDING",
+        archives: {
+          create: data.archiveIds.map((archiveId: string) => ({
+            archiveId: archiveId,
+          })),
+        },
       },
       include: {
-        archive: {
-          select: {
-            id: true,
-            judulBerkas: true,
-            nomorBerkas: true,
-            klasifikasi: true,
-            nomorSurat: true,
-            perihal: true,
-            tanggal: true,
-            lokasiSimpan: true,
+        archives: {
+          include: {
+            archive: {
+              select: {
+                id: true,
+                judulBerkas: true,
+                nomorBerkas: true,
+                klasifikasi: true,
+                nomorSurat: true,
+                perihal: true,
+                tanggal: true,
+                lokasiSimpan: true,
+              },
+            },
           },
         },
       },
@@ -141,7 +209,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: serahTerima,
-      message: "Usulan serah terima berhasil dibuat",
+      message: `Usulan serah terima untuk ${archives.length} arsip berhasil dibuat`,
     });
   } catch (error) {
     console.error("Error creating serah terima:", error);

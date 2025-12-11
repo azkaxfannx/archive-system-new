@@ -1,4 +1,4 @@
-// hooks/useArchives.ts
+// hooks/useArchives.ts - UPDATED
 import useSWR from "swr";
 import { ArchiveRecord } from "@/types/archive";
 
@@ -14,6 +14,8 @@ interface UseArchivesParams {
   startMonth?: string;
   endMonth?: string;
   year?: string;
+  // NEW: Add excludeSerahTerima parameter
+  excludeSerahTerima?: boolean;
 }
 
 interface ArchiveResponse {
@@ -29,7 +31,7 @@ interface ArchiveResponse {
 const fetcher = async (url: string) => {
   const response = await fetch(url, {
     method: "GET",
-    credentials: "include", // Important untuk cookie-based auth
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },
@@ -54,6 +56,7 @@ export function useArchives(params: UseArchivesParams) {
     startMonth = "",
     endMonth = "",
     year = "",
+    excludeSerahTerima = false, // NEW: Default to false
   } = params;
 
   // Build query parameters
@@ -65,6 +68,11 @@ export function useArchives(params: UseArchivesParams) {
     order,
     status,
   });
+
+  // NEW: Add excludeSerahTerima parameter
+  if (excludeSerahTerima) {
+    queryParams.append("excludeSerahTerima", "true");
+  }
 
   // Add period filters if provided
   if (year) {

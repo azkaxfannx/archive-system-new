@@ -1,7 +1,14 @@
 "use client";
 
 import React from "react";
-import { FileCheck, Clock, CheckCircle, XCircle, Calendar, TrendingUp } from "lucide-react";
+import {
+  FileCheck,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Calendar,
+  TrendingUp,
+} from "lucide-react";
 
 interface SerahTerimaStatsCardsProps {
   totalCount: number;

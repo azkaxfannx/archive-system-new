@@ -1,4 +1,4 @@
-// types/archive.ts - Complete Updated Version with Usulan Status
+// types/archive.ts - UPDATED VERSION with Many-to-Many
 
 // Archive record interface
 export interface ArchiveRecord {
@@ -29,7 +29,12 @@ export interface ArchiveRecord {
     name: string;
     role: "ADMIN" | "USER";
   };
-  serahTerima?: SerahTerimaRecord;
+
+  // CHANGED: Now it's an array through junction table
+  serahTerimaArchives?: SerahTerimaArchive[];
+
+  // NEW: Add peminjaman field
+  peminjaman?: PeminjamanRecord[];
 }
 
 // Form data interface
@@ -80,49 +85,53 @@ export interface PeminjamanFormData {
   archiveId: string;
 }
 
-// ========== SERAH TERIMA INTERFACES (UPDATED) ==========
+// ========== SERAH TERIMA INTERFACES (UPDATED FOR MANY-TO-MANY) ==========
 
 // Status usulan enum
 export type StatusUsulan = "PENDING" | "APPROVED" | "REJECTED";
 
-// SerahTerima record with usulan status
+// NEW: Junction table interface
+export interface SerahTerimaArchive {
+  id: string;
+  serahTerimaId: string;
+  archiveId: string;
+  archive?: ArchiveRecord;
+  serahTerima?: SerahTerimaRecord;
+  createdAt: string;
+}
+
+// UPDATED: SerahTerima now contains multiple archives
 export interface SerahTerimaRecord {
   id: string;
-  
+
   // Usulan fields (always filled)
   pihakPenyerah: string;
   pihakPenerima: string;
+  nomorBerkas: string; // NEW: Store nomorBerkas
   tanggalUsulan: string;
   statusUsulan: StatusUsulan;
-  
+
   // Approval fields (nullable - only filled when approved)
   nomorBeritaAcara: string | null;
   tanggalSerahTerima: string | null;
   keterangan: string | null;
-  
+
   // Rejection field (nullable - only filled when rejected)
   alasanPenolakan: string | null;
-  
-  archiveId: string;
-  archive?: {
-    id: string;
-    judulBerkas?: string;
-    nomorBerkas?: string;
-    klasifikasi?: string;
-    nomorSurat?: string;
-    perihal?: string;
-    tanggal?: string;
-    lokasiSimpan?: string;
-  };
+
+  // CHANGED: Now contains array of archives through junction table
+  archives?: SerahTerimaArchive[];
+
   createdAt: string;
   updatedAt: string;
 }
 
-// Form data for creating usulan (simplified)
+// UPDATED: Form data for creating usulan with multiple archives
 export interface SerahTerimaUsulanFormData {
   pihakPenyerah: string;
   pihakPenerima: string;
-  archiveId: string;
+  nomorBerkas: string; // NEW: Selected nomorBerkas
+  archiveIds: string[]; // NEW: Array of selected archive IDs
 }
 
 // Form data for approval
@@ -139,7 +148,15 @@ export interface SerahTerimaFormData {
   pihakPenerima: string;
   tanggalSerahTerima?: string;
   keterangan?: string | null;
-  archiveId: string;
+  nomorBerkas?: string;
+  archiveIds?: string[];
+}
+
+// NEW: Interface for nomor berkas with archives
+export interface NomorBerkasWithArchives {
+  nomorBerkas: string;
+  archives: ArchiveRecord[];
+  totalCount: number;
 }
 
 // Pagination interface
@@ -168,6 +185,7 @@ export interface ArchiveParams {
   startMonth?: string;
   endMonth?: string;
   year?: string;
+  excludeSerahTerima?: boolean; // NEW: Option to exclude already handed over archives
 }
 
 // Import result interface

@@ -61,7 +61,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Reject usulan
+    // FIXED: Use archives instead of archive
     const rejected = await prisma.serahTerima.update({
       where: { id },
       data: {
@@ -69,16 +69,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         alasanPenolakan: data.alasanPenolakan,
       },
       include: {
-        archive: {
-          select: {
-            id: true,
-            judulBerkas: true,
-            nomorBerkas: true,
-            klasifikasi: true,
-            nomorSurat: true,
-            perihal: true,
-            tanggal: true,
-            lokasiSimpan: true,
+        archives: {
+          include: {
+            archive: {
+              select: {
+                id: true,
+                judulBerkas: true,
+                nomorBerkas: true,
+                klasifikasi: true,
+                nomorSurat: true,
+                perihal: true,
+                tanggal: true,
+                lokasiSimpan: true,
+              },
+            },
           },
         },
       },

@@ -1,4 +1,4 @@
-// prisma/schema.prisma
+// prisma/schema.prisma - UPDATED VERSION
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,7 +12,7 @@ model User {
   id        String    @id @default(uuid())
   name      String
   nip       String    @unique
-  password  String    // simpan hash!
+  password  String
   role      Role      @default(USER)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -44,15 +44,12 @@ model Archive {
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
-  // Owner (pengupload)
   userId              String
   user                User         @relation(fields: [userId], references: [id])
 
-  // Relasi Peminjaman
   peminjaman          Peminjaman[]
-  
-  // Relasi Serah Terima
-  serahTerima         SerahTerima?
+  // CHANGED: Remove direct relation, use junction table
+  serahTerimaArchives SerahTerimaArchive[]
 }
 
 model Peminjaman {
@@ -72,20 +69,54 @@ model Peminjaman {
   @@map("peminjaman")
 }
 
+// CHANGED: Removed archiveId from SerahTerima
 model SerahTerima {
-  id                  String    @id @default(uuid())
-  nomorBeritaAcara    String    @unique
+  id                  String              @id @default(uuid())
+  
+  // Usulan fields (diisi saat usulan)
   pihakPenyerah       String
   pihakPenerima       String
-  tanggalSerahTerima  DateTime
+  nomorBerkas         String              // NEW: Store nomorBerkas for reference
+  tanggalUsulan       DateTime            @default(now())
+  statusUsulan        StatusUsulan        @default(PENDING)
+  
+  // Approval fields (diisi setelah diterima)
+  nomorBeritaAcara    String?             @unique
+  tanggalSerahTerima  DateTime?
   keterangan          String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  
+  // Rejection field
+  alasanPenolakan     String?
+  
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
-  archiveId           String    @unique
-  archive             Archive   @relation(fields: [archiveId], references: [id], onDelete: Cascade)
+  // NEW: Many-to-many relation with Archives
+  archives            SerahTerimaArchive[]
 
   @@map("serah_terima")
+}
+
+// NEW: Junction table for many-to-many relationship
+model SerahTerimaArchive {
+  id            String      @id @default(uuid())
+  
+  serahTerimaId String
+  serahTerima   SerahTerima @relation(fields: [serahTerimaId], references: [id], onDelete: Cascade)
+  
+  archiveId     String
+  archive       Archive     @relation(fields: [archiveId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime    @default(now())
+
+  @@unique([serahTerimaId, archiveId])
+  @@map("serah_terima_archives")
+}
+
+enum StatusUsulan {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum Status {

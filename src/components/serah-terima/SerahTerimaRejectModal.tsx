@@ -81,17 +81,23 @@ export default function SerahTerimaRejectModal({
             </h3>
             <div className="space-y-2 text-sm">
               <div>
-                <span className="font-medium text-gray-700">Pihak Penyerah:</span>
+                <span className="font-medium text-gray-700">
+                  Pihak Penyerah:
+                </span>
                 <span className="ml-2 text-gray-900">{item.pihakPenyerah}</span>
               </div>
               <div>
-                <span className="font-medium text-gray-700">Pihak Penerima:</span>
+                <span className="font-medium text-gray-700">
+                  Pihak Penerima:
+                </span>
                 <span className="ml-2 text-gray-900">{item.pihakPenerima}</span>
               </div>
               <div>
                 <span className="font-medium text-gray-700">Berkas:</span>
                 <span className="ml-2 text-gray-900">
-                  {item.archive?.judulBerkas || "-"}
+                  {item.archives && item.archives.length > 0
+                    ? item.archives[0].archive?.judulBerkas || "-"
+                    : "-"}
                 </span>
               </div>
             </div>

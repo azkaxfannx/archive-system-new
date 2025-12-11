@@ -1,7 +1,14 @@
 "use client";
 
 import React from "react";
-import { X, FileText, User, Calendar, CheckCircle, XCircle, Clock } from "lucide-react";
+import {
+  X,
+  FileCheck,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Package,
+} from "lucide-react";
 import { SerahTerimaRecord } from "@/types/archive";
 
 interface SerahTerimaDetailModalProps {
@@ -20,57 +27,62 @@ export default function SerahTerimaDetailModal({
         day: "2-digit",
         month: "long",
         year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
       });
     } catch (error) {
       return "-";
     }
   };
 
-  const getStatusConfig = (status: string) => {
-    const configs = {
+  const getStatusBadge = (status: string) => {
+    const statusConfig = {
       PENDING: {
         label: "Menunggu Persetujuan",
-        color: "yellow",
+        className: "bg-yellow-100 text-yellow-800 border-yellow-300",
         icon: Clock,
       },
       APPROVED: {
         label: "Disetujui",
-        color: "green",
+        className: "bg-green-100 text-green-800 border-green-300",
         icon: CheckCircle,
       },
       REJECTED: {
         label: "Ditolak",
-        color: "red",
+        className: "bg-red-100 text-red-800 border-red-300",
         icon: XCircle,
       },
     };
-    return configs[status as keyof typeof configs] || configs.PENDING;
-  };
 
-  const statusConfig = getStatusConfig(item.statusUsulan);
-  const StatusIcon = statusConfig.icon;
+    const config = statusConfig[status as keyof typeof statusConfig];
+    if (!config) return null;
+
+    const Icon = config.icon;
+
+    return (
+      <div
+        className={`inline-flex items-center px-4 py-2 rounded-lg border ${config.className}`}
+      >
+        <Icon size={18} className="mr-2" />
+        <span className="font-semibold">{config.label}</span>
+      </div>
+    );
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className={`p-6 border-b bg-${statusConfig.color}-50 flex items-center justify-between`}>
+        <div className="p-6 border-b bg-purple-50 flex items-center justify-between sticky top-0 z-10">
           <div className="flex items-center space-x-3">
-            <div className={`p-2 bg-${statusConfig.color}-100 rounded-lg`}>
-              <FileText className={`h-6 w-6 text-${statusConfig.color}-600`} />
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <FileCheck className="h-6 w-6 text-purple-600" />
             </div>
             <div>
               <h2 className="text-xl font-bold text-gray-900">
                 Detail Serah Terima
               </h2>
-              <div className="flex items-center mt-1">
-                <StatusIcon size={16} className={`text-${statusConfig.color}-600 mr-1`} />
-                <span className={`text-sm font-medium text-${statusConfig.color}-800`}>
-                  {statusConfig.label}
-                </span>
-              </div>
+              <p className="text-sm text-gray-600">
+                Nomor Berkas: {item.nomorBerkas}
+              </p>
             </div>
           </div>
           <button
@@ -81,148 +93,159 @@ export default function SerahTerimaDetailModal({
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-6 space-y-6">
-          {/* Informasi Usulan */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <User className="mr-2 text-blue-600" size={20} />
+          {/* Status */}
+          <div className="flex justify-center">
+            {getStatusBadge(item.statusUsulan)}
+          </div>
+
+          {/* Usulan Information */}
+          <div className="bg-purple-50 rounded-lg p-5 border border-purple-200">
+            <h3 className="font-semibold text-purple-900 mb-4 flex items-center">
+              <FileCheck className="mr-2" size={18} />
               Informasi Usulan
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium text-gray-600">
+                <label className="text-xs font-medium text-purple-700 uppercase tracking-wide">
                   Pihak Penyerah
                 </label>
-                <p className="text-sm text-gray-900 mt-1">
+                <p className="mt-1 text-sm text-gray-900 font-medium">
                   {item.pihakPenyerah}
                 </p>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-600">
+                <label className="text-xs font-medium text-purple-700 uppercase tracking-wide">
                   Pihak Penerima
                 </label>
-                <p className="text-sm text-gray-900 mt-1">
+                <p className="mt-1 text-sm text-gray-900 font-medium">
                   {item.pihakPenerima}
                 </p>
               </div>
-              <div className="md:col-span-2">
-                <label className="text-sm font-medium text-gray-600">
+              <div>
+                <label className="text-xs font-medium text-purple-700 uppercase tracking-wide">
+                  Nomor Berkas
+                </label>
+                <p className="mt-1 text-sm text-gray-900 font-medium">
+                  {item.nomorBerkas}
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-purple-700 uppercase tracking-wide">
                   Tanggal Usulan
                 </label>
-                <p className="text-sm text-gray-900 mt-1">
+                <p className="mt-1 text-sm text-gray-900 font-medium">
                   {formatDate(item.tanggalUsulan)}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Detail Berkas */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <FileText className="mr-2 text-purple-600" size={20} />
-              Detail Berkas
+          {/* Archives List */}
+          <div className="bg-blue-50 rounded-lg p-5 border border-blue-200">
+            <h3 className="font-semibold text-blue-900 mb-4 flex items-center">
+              <Package className="mr-2" size={18} />
+              Daftar Arsip ({item.archives?.length || 0})
             </h3>
-            <div className="bg-purple-50 p-4 rounded-lg space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-purple-800">
-                    Nomor Berkas
-                  </label>
-                  <p className="text-sm text-purple-900 mt-1">
-                    {item.archive?.nomorBerkas || "-"}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-purple-800">
-                    Nomor Surat
-                  </label>
-                  <p className="text-sm text-purple-900 mt-1">
-                    {item.archive?.nomorSurat || "-"}
-                  </p>
-                </div>
+            {item.archives && item.archives.length > 0 ? (
+              <div className="space-y-3">
+                {item.archives.map((sta, idx) => (
+                  <div
+                    key={sta.id}
+                    className="bg-white rounded-lg p-4 border border-blue-200"
+                  >
+                    <div className="flex items-start">
+                      <span className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-blue-100 text-blue-800 text-sm font-bold mr-3 flex-shrink-0">
+                        {idx + 1}
+                      </span>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900 mb-2">
+                          {sta.archive?.judulBerkas || "-"}
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <span className="font-medium text-gray-600">
+                              No. Surat:
+                            </span>
+                            <span className="ml-2 text-gray-900">
+                              {sta.archive?.nomorSurat || "-"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-600">
+                              Klasifikasi:
+                            </span>
+                            <span className="ml-2 text-gray-900">
+                              {sta.archive?.klasifikasi || "-"}
+                            </span>
+                          </div>
+                          <div className="md:col-span-2">
+                            <span className="font-medium text-gray-600">
+                              Perihal:
+                            </span>
+                            <span className="ml-2 text-gray-900">
+                              {sta.archive?.perihal || "-"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-600">
+                              Tanggal:
+                            </span>
+                            <span className="ml-2 text-gray-900">
+                              {formatDate(sta.archive?.tanggal)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-600">
+                              Lokasi:
+                            </span>
+                            <span className="ml-2 text-gray-900">
+                              {sta.archive?.lokasiSimpan || "-"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div>
-                <label className="text-sm font-medium text-purple-800">
-                  Judul Berkas
-                </label>
-                <p className="text-sm text-purple-900 mt-1">
-                  {item.archive?.judulBerkas || "-"}
-                </p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-purple-800">
-                  Perihal
-                </label>
-                <p className="text-sm text-purple-900 mt-1">
-                  {item.archive?.perihal || "-"}
-                </p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-purple-800">
-                    Klasifikasi
-                  </label>
-                  <p className="text-sm text-purple-900 mt-1">
-                    {item.archive?.klasifikasi || "-"}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-purple-800">
-                    Lokasi Simpan
-                  </label>
-                  <p className="text-sm text-purple-900 mt-1">
-                    {item.archive?.lokasiSimpan || "-"}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-purple-800">
-                    Tanggal Surat
-                  </label>
-                  <p className="text-sm text-purple-900 mt-1">
-                    {item.archive?.tanggal
-                      ? new Date(item.archive.tanggal).toLocaleDateString(
-                          "id-ID"
-                        )
-                      : "-"}
-                  </p>
-                </div>
-              </div>
-            </div>
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-4">
+                Tidak ada arsip terlampir
+              </p>
+            )}
           </div>
 
-          {/* Informasi Approval (jika sudah disetujui) */}
+          {/* Approval Details (if approved) */}
           {item.statusUsulan === "APPROVED" && (
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <CheckCircle className="mr-2 text-green-600" size={20} />
-                Informasi Serah Terima
+            <div className="bg-green-50 rounded-lg p-5 border border-green-200">
+              <h3 className="font-semibold text-green-900 mb-4 flex items-center">
+                <CheckCircle className="mr-2" size={18} />
+                Detail Persetujuan
               </h3>
-              <div className="bg-green-50 p-4 rounded-lg space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-green-800">
-                      Nomor Berita Acara
-                    </label>
-                    <p className="text-sm text-green-900 mt-1">
-                      {item.nomorBeritaAcara || "-"}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-green-800">
-                      Tanggal Serah Terima
-                    </label>
-                    <p className="text-sm text-green-900 mt-1">
-                      {formatDate(item.tanggalSerahTerima)}
-                    </p>
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-medium text-green-700 uppercase tracking-wide">
+                    Nomor Berita Acara
+                  </label>
+                  <p className="mt-1 text-sm text-gray-900 font-medium">
+                    {item.nomorBeritaAcara || "-"}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-green-700 uppercase tracking-wide">
+                    Tanggal Serah Terima
+                  </label>
+                  <p className="mt-1 text-sm text-gray-900 font-medium">
+                    {formatDate(item.tanggalSerahTerima)}
+                  </p>
                 </div>
                 {item.keterangan && (
-                  <div>
-                    <label className="text-sm font-medium text-green-800">
+                  <div className="md:col-span-2">
+                    <label className="text-xs font-medium text-green-700 uppercase tracking-wide">
                       Keterangan
                     </label>
-                    <p className="text-sm text-green-900 mt-1">
+                    <p className="mt-1 text-sm text-gray-900">
                       {item.keterangan}
                     </p>
                   </div>
@@ -231,39 +254,23 @@ export default function SerahTerimaDetailModal({
             </div>
           )}
 
-          {/* Informasi Penolakan (jika ditolak) */}
+          {/* Rejection Details (if rejected) */}
           {item.statusUsulan === "REJECTED" && item.alasanPenolakan && (
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <XCircle className="mr-2 text-red-600" size={20} />
+            <div className="bg-red-50 rounded-lg p-5 border border-red-200">
+              <h3 className="font-semibold text-red-900 mb-3 flex items-center">
+                <XCircle className="mr-2" size={18} />
                 Alasan Penolakan
               </h3>
-              <div className="bg-red-50 p-4 rounded-lg">
-                <p className="text-sm text-red-900">{item.alasanPenolakan}</p>
-              </div>
+              <p className="text-sm text-gray-900">{item.alasanPenolakan}</p>
             </div>
           )}
-
-          {/* Timestamp */}
-          <div className="border-t pt-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500">
-              <div>
-                <label className="font-medium">Dibuat:</label>
-                <p>{formatDate(item.createdAt)}</p>
-              </div>
-              <div>
-                <label className="font-medium">Terakhir Diubah:</label>
-                <p>{formatDate(item.updatedAt)}</p>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-gray-50 border-t flex justify-end">
+        <div className="p-6 border-t bg-gray-50 flex justify-end">
           <button
             onClick={onClose}
-            className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
           >
             Tutup
           </button>

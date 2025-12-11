@@ -15,6 +15,9 @@ import {
   XCircle,
   Clock,
   Eye,
+  ChevronDown,
+  ChevronRight,
+  Package,
 } from "lucide-react";
 import { SerahTerimaRecord } from "@/types/archive";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
@@ -39,6 +42,7 @@ interface SerahTerimaTableProps {
   onColumnFilter: (column: string, value: string) => void;
   columnFilters: Record<string, string>;
   onExport: () => void;
+  onAdd: () => void;
   isExporting: boolean;
   periodFilters: PeriodFilters;
   onPeriodFilterChange: (field: keyof PeriodFilters, value: string) => void;
@@ -48,10 +52,11 @@ interface SerahTerimaTableProps {
 
 const TABLE_HEADERS = [
   { key: "statusUsulan", label: "Status", sortable: true },
+  { key: "nomorBerkas", label: "No. Berkas", sortable: true },
   { key: "pihakPenyerah", label: "Pihak Penyerah", sortable: true },
   { key: "pihakPenerima", label: "Pihak Penerima", sortable: true },
-  { key: "judulBerkas", label: "Berkas", sortable: false },
   { key: "tanggalUsulan", label: "Tgl Usulan", sortable: true },
+  { key: "archives", label: "Arsip", sortable: false },
   { key: "nomorBeritaAcara", label: "No. BA", sortable: false },
   { key: "tanggalSerahTerima", label: "Tgl Serah Terima", sortable: false },
   { key: "actions", label: "Aksi", sortable: false },
@@ -86,6 +91,7 @@ export default function SerahTerimaTable({
   onColumnFilter,
   columnFilters,
   onExport,
+  onAdd,
   isExporting,
   periodFilters,
   onPeriodFilterChange,
@@ -95,6 +101,19 @@ export default function SerahTerimaTable({
   const [showFilters, setShowFilters] = useState(false);
   const [localFilters, setLocalFilters] = useState<Record<string, string>>({});
   const [showPeriodFilters, setShowPeriodFilters] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const toggleRowExpansion = (id: string) => {
+    setExpandedRows((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
 
   const getSortIcon = (field: string) => {
     if (sortField !== field) {
@@ -240,6 +259,14 @@ export default function SerahTerimaTable({
         </div>
 
         <div className="flex items-center space-x-2">
+          {/* Add Button */}
+          <button
+            onClick={onAdd}
+            className="px-3 py-1.5 text-sm rounded bg-purple-600 text-white hover:bg-purple-700 transition-colors"
+          >
+            + Tambah Serah Terima
+          </button>
+
           {/* Export Button */}
           <button
             onClick={onExport}
@@ -373,6 +400,23 @@ export default function SerahTerimaTable({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
+                Nomor Berkas
+              </label>
+              <input
+                type="text"
+                value={
+                  localFilters.nomorBerkas || columnFilters.nomorBerkas || ""
+                }
+                onChange={(e) =>
+                  handleInputChange("nomorBerkas", e.target.value)
+                }
+                className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                placeholder="Filter nomor berkas..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
                 Pihak Penyerah
               </label>
               <input
@@ -408,23 +452,6 @@ export default function SerahTerimaTable({
                 placeholder="Filter pihak penerima..."
               />
             </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Judul Berkas
-              </label>
-              <input
-                type="text"
-                value={
-                  localFilters.judulBerkas || columnFilters.judulBerkas || ""
-                }
-                onChange={(e) =>
-                  handleInputChange("judulBerkas", e.target.value)
-                }
-                className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                placeholder="Filter judul berkas..."
-              />
-            </div>
           </div>
         </div>
       )}
@@ -434,6 +461,9 @@ export default function SerahTerimaTable({
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                {/* Expand column */}
+              </th>
               {TABLE_HEADERS.map((header) => (
                 <th
                   key={header.key}
@@ -454,107 +484,199 @@ export default function SerahTerimaTable({
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {serahTerima.map((item, index) => (
-              <tr
-                key={item.id}
-                className={`transition-colors ${getRowColorClass(index)}`}
-              >
-                {/* Status */}
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {getStatusBadge(item.statusUsulan)}
-                </td>
-
-                {/* Pihak Penyerah */}
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">
-                    {item.pihakPenyerah}
-                  </div>
-                </td>
-
-                {/* Pihak Penerima */}
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">
-                    {item.pihakPenerima}
-                  </div>
-                </td>
-
-                {/* Judul Berkas */}
-                <td className="px-6 py-4">
-                  <div className="text-sm text-gray-900 max-w-xs truncate">
-                    {item.archive?.judulBerkas || "-"}
-                  </div>
-                </td>
-
-                {/* Tanggal Usulan */}
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">
-                    {formatDate(item.tanggalUsulan)}
-                  </div>
-                </td>
-
-                {/* Nomor Berita Acara */}
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">
-                    {item.nomorBeritaAcara || "-"}
-                  </div>
-                </td>
-
-                {/* Tanggal Serah Terima */}
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">
-                    {formatDate(item.tanggalSerahTerima)}
-                  </div>
-                </td>
-
-                {/* Aksi */}
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <div className="flex space-x-1">
+              <React.Fragment key={item.id}>
+                <tr className={`transition-colors ${getRowColorClass(index)}`}>
+                  {/* Expand Button */}
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <button
-                      onClick={() => onView(item)}
-                      className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
-                      title="Lihat Detail"
+                      onClick={() => toggleRowExpansion(item.id)}
+                      className="text-purple-600 hover:text-purple-900"
+                      title={
+                        expandedRows.has(item.id)
+                          ? "Sembunyikan"
+                          : "Lihat Detail Arsip"
+                      }
                     >
-                      <Eye size={16} />
+                      {expandedRows.has(item.id) ? (
+                        <ChevronDown size={18} />
+                      ) : (
+                        <ChevronRight size={18} />
+                      )}
                     </button>
+                  </td>
 
-                    {item.statusUsulan === "PENDING" && (
-                      <>
-                        <button
-                          onClick={() => onApprove(item)}
-                          className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
-                          title="Setujui"
-                        >
-                          <CheckCircle size={16} />
-                        </button>
-                        <button
-                          onClick={() => onReject(item)}
-                          className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
-                          title="Tolak"
-                        >
-                          <XCircle size={16} />
-                        </button>
-                      </>
-                    )}
+                  {/* Status */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {getStatusBadge(item.statusUsulan)}
+                  </td>
 
-                    {item.statusUsulan === "APPROVED" && (
+                  {/* Nomor Berkas */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">
+                      {item.nomorBerkas}
+                    </div>
+                  </td>
+
+                  {/* Pihak Penyerah */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {item.pihakPenyerah}
+                    </div>
+                  </td>
+
+                  {/* Pihak Penerima */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {item.pihakPenerima}
+                    </div>
+                  </td>
+
+                  {/* Tanggal Usulan */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {formatDate(item.tanggalUsulan)}
+                    </div>
+                  </td>
+
+                  {/* Archives Count */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center text-sm text-gray-900">
+                      <Package size={14} className="mr-1 text-purple-600" />
+                      <span className="font-medium">
+                        {item.archives?.length || 0} arsip
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* Nomor Berita Acara */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {item.nomorBeritaAcara || "-"}
+                    </div>
+                  </td>
+
+                  {/* Tanggal Serah Terima */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {formatDate(item.tanggalSerahTerima)}
+                    </div>
+                  </td>
+
+                  {/* Aksi */}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex space-x-1">
                       <button
-                        onClick={() => onEdit(item)}
-                        className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
-                        title="Edit"
+                        onClick={() => onView(item)}
+                        className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
+                        title="Lihat Detail"
                       >
-                        <Edit2 size={16} />
+                        <Eye size={16} />
                       </button>
-                    )}
 
-                    <button
-                      onClick={() => onDelete(item)}
-                      className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
-                      title="Hapus"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
+                      {item.statusUsulan === "PENDING" && (
+                        <>
+                          <button
+                            onClick={() => onApprove(item)}
+                            className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
+                            title="Setujui"
+                          >
+                            <CheckCircle size={16} />
+                          </button>
+                          <button
+                            onClick={() => onReject(item)}
+                            className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
+                            title="Tolak"
+                          >
+                            <XCircle size={16} />
+                          </button>
+                        </>
+                      )}
+
+                      {item.statusUsulan === "APPROVED" && (
+                        <button
+                          onClick={() => onEdit(item)}
+                          className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
+                          title="Edit"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => onDelete(item)}
+                        className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
+                        title="Hapus"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+
+                {/* Expanded Row - Archive Details */}
+                {expandedRows.has(item.id) && (
+                  <tr className={getRowColorClass(index)}>
+                    <td colSpan={10} className="px-6 py-4 bg-purple-50">
+                      <div className="space-y-2">
+                        <h4 className="font-semibold text-sm text-purple-900 mb-3">
+                          Daftar Arsip ({item.archives?.length || 0}):
+                        </h4>
+                        {item.archives && item.archives.length > 0 ? (
+                          <div className="grid grid-cols-1 gap-2">
+                            {item.archives.map((sta, idx) => (
+                              <div
+                                key={sta.id}
+                                className="bg-white rounded-lg p-3 border border-purple-200"
+                              >
+                                <div className="flex items-start">
+                                  <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-purple-100 text-purple-800 text-xs font-medium mr-3 flex-shrink-0">
+                                    {idx + 1}
+                                  </span>
+                                  <div className="flex-1 text-sm">
+                                    <p className="font-medium text-gray-900">
+                                      {sta.archive?.judulBerkas || "-"}
+                                    </p>
+                                    <div className="mt-1 text-xs text-gray-600 space-y-1">
+                                      <p>
+                                        <span className="font-medium">
+                                          No. Surat:
+                                        </span>{" "}
+                                        {sta.archive?.nomorSurat || "-"}
+                                      </p>
+                                      <p>
+                                        <span className="font-medium">
+                                          Perihal:
+                                        </span>{" "}
+                                        {sta.archive?.perihal || "-"}
+                                      </p>
+                                      <p>
+                                        <span className="font-medium">
+                                          Tanggal:
+                                        </span>{" "}
+                                        {formatDate(sta.archive?.tanggal)}
+                                      </p>
+                                      <p>
+                                        <span className="font-medium">
+                                          Lokasi:
+                                        </span>{" "}
+                                        {sta.archive?.lokasiSimpan || "-"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">
+                            Tidak ada arsip terlampir
+                          </p>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -567,11 +689,17 @@ export default function SerahTerimaTable({
           <h3 className="text-lg font-medium text-gray-900 mb-2">
             Tidak ada data ditemukan
           </h3>
-          <p className="text-gray-500">
+          <p className="text-gray-500 mb-4">
             {Object.keys(columnFilters).length > 0 || statusFilter
               ? "Coba ubah filter pencarian yang dipilih"
               : "Belum ada usulan serah terima"}
           </p>
+          <button
+            onClick={onAdd}
+            className="text-purple-600 hover:text-purple-800 text-sm underline"
+          >
+            + Tambah Serah Terima Baru
+          </button>
         </div>
       )}
     </div>

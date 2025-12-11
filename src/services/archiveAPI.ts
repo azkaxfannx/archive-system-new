@@ -1,4 +1,4 @@
-// services/archiveAPI.ts - Complete Updated Version
+// services/archiveAPI.ts - UPDATED VERSION with Many-to-Many
 import {
   ArchiveRecord,
   ArchiveFormData,
@@ -9,6 +9,8 @@ import {
   PeminjamanRecord,
   SerahTerimaFormData,
   SerahTerimaRecord,
+  SerahTerimaUsulanFormData,
+  NomorBerkasWithArchives,
 } from "@/types/archive";
 
 export const archiveAPI = {
@@ -24,6 +26,11 @@ export const archiveAPI = {
     if (params.status) searchParams.append("status", params.status);
     if (params.sort) searchParams.append("sort", params.sort);
     if (params.order) searchParams.append("order", params.order);
+
+    // NEW: Exclude archives that are already handed over (approved serah terima)
+    if (params.excludeSerahTerima) {
+      searchParams.append("excludeSerahTerima", "true");
+    }
 
     // Add column filters
     if (params.filters) {
@@ -109,6 +116,38 @@ export const archiveAPI = {
     return res.json();
   },
 
+  // NEW: Get unique nomor berkas list
+  async getNomorBerkasList(): Promise<string[]> {
+    const res = await fetch("/api/archives/nomor-berkas", {
+      credentials: "include",
+    });
+    if (!res.ok) throw new Error("Failed to fetch nomor berkas list");
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  // NEW: Get archives by nomor berkas (for serah terima selection)
+  async getArchivesByNomorBerkas(
+    nomorBerkas: string
+  ): Promise<NomorBerkasWithArchives> {
+    const res = await fetch(
+      `/api/archives/by-nomor-berkas/${encodeURIComponent(nomorBerkas)}`,
+      {
+        credentials: "include",
+      }
+    );
+    if (!res.ok) throw new Error("Failed to fetch archives by nomor berkas");
+
+    const response = await res.json();
+
+    // FIXED: Extract data from response.data
+    if (response.success && response.data) {
+      return response.data; // response.data sudah sesuai dengan NomorBerkasWithArchives
+    } else {
+      throw new Error("Invalid response structure");
+    }
+  },
+
   // ========== PEMINJAMAN METHODS ==========
 
   // Create peminjaman
@@ -131,12 +170,27 @@ export const archiveAPI = {
   },
 
   // Get peminjaman by archive ID
+  // Get peminjaman by archive ID - FIXED VERSION
   async getPeminjamanByArchive(archiveId: string): Promise<PeminjamanRecord[]> {
-    const res = await fetch(`/api/peminjaman/archives/${archiveId}`, {
-      credentials: "include",
-    });
-    if (!res.ok) throw new Error("Failed to fetch peminjaman");
-    return res.json();
+    try {
+      const res = await fetch(`/api/peminjaman/archives/${archiveId}`, {
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        // Return empty array if archive not found or no peminjaman
+        if (res.status === 404 || res.status === 403) {
+          return [];
+        }
+        throw new Error(`Failed to fetch peminjaman: ${res.status}`);
+      }
+
+      const response = await res.json();
+      return response.data || [];
+    } catch (error) {
+      console.error("Error in getPeminjamanByArchive:", error);
+      return []; // Return empty array instead of throwing
+    }
   },
 
   // Get all peminjaman
@@ -193,14 +247,12 @@ export const archiveAPI = {
     return res.json();
   },
 
-  // ========== SERAH TERIMA METHODS (UPDATED) ==========
+  // ========== SERAH TERIMA METHODS (UPDATED FOR MANY-TO-MANY) ==========
 
-  // Create usulan serah terima (NEW)
-  async createSerahTerimaUsulan(data: {
-    pihakPenyerah: string;
-    pihakPenerima: string;
-    archiveId: string;
-  }): Promise<SerahTerimaRecord> {
+  // UPDATED: Create usulan serah terima with multiple archives
+  async createSerahTerimaUsulan(
+    data: SerahTerimaUsulanFormData
+  ): Promise<SerahTerimaRecord> {
     const res = await fetch("/api/serah-terima", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -242,7 +294,7 @@ export const archiveAPI = {
     return res.json();
   },
 
-  // Approve usulan serah terima (NEW)
+  // Approve usulan serah terima
   async approveSerahTerima(
     id: string,
     data: {
@@ -251,23 +303,61 @@ export const archiveAPI = {
       keterangan?: string;
     }
   ): Promise<SerahTerimaRecord> {
-    const res = await fetch(`/api/serah-terima/${id}/approve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(data),
-    });
+    console.log("=== DEBUG FRONTEND API CALL ===");
+    console.log("Approve ID:", id);
+    console.log("Data to send:", data);
 
-    if (!res.ok) {
-      const error = await res.json();
-      throw { response: { data: error } };
+    const url = `/api/serah-terima/${id}/approve`;
+    console.log("URL:", url);
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+
+      console.log("Response status:", res.status);
+      console.log("Response statusText:", res.statusText);
+
+      // Try to get response text first
+      const responseText = await res.text();
+      console.log("Raw response:", responseText);
+
+      let responseData;
+      try {
+        responseData = responseText ? JSON.parse(responseText) : {};
+        console.log("Parsed response:", responseData);
+      } catch (parseError) {
+        console.error("Failed to parse JSON:", parseError);
+        responseData = { error: "Invalid JSON response" };
+      }
+
+      if (!res.ok) {
+        console.error("API request failed:", {
+          status: res.status,
+          data: responseData,
+        });
+
+        throw {
+          response: {
+            data: responseData,
+            status: res.status,
+            statusText: res.statusText,
+          },
+          message:
+            responseData.error || `HTTP ${res.status}: ${res.statusText}`,
+        };
+      }
+      return responseData.data;
+    } catch (error) {
+      console.error("Fetch error in approveSerahTerima:", error);
+      throw error;
     }
-
-    const result = await res.json();
-    return result.data;
   },
 
-  // Reject usulan serah terima (NEW)
+  // Reject usulan serah terima
   async rejectSerahTerima(
     id: string,
     alasanPenolakan: string
@@ -324,62 +414,5 @@ export const archiveAPI = {
     }
 
     return res.json();
-  },
-
-  // Check archive availability for serah terima
-  async checkArchiveAvailability(
-    archiveId: string
-  ): Promise<{ available: boolean; reason?: string }> {
-    try {
-      const res = await fetch(
-        `/api/serah-terima/check-availability/${archiveId}`,
-        {
-          credentials: "include",
-        }
-      );
-
-      if (!res.ok) {
-        // Jika endpoint tidak tersedia atau error, return default response
-        if (res.status === 404) {
-          console.warn(
-            "Availability check endpoint not found, assuming available"
-          );
-          return {
-            available: true,
-            reason: "Endpoint tidak tersedia, asumsikan tersedia",
-          };
-        }
-
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(
-          errorData.reason || `HTTP error! status: ${res.status}`
-        );
-      }
-
-      return res.json();
-    } catch (error) {
-      console.error("Availability check failed:", error);
-      // Fallback: assume archive is available to prevent blocking the feature
-      return {
-        available: true,
-        reason: "Pemeriksaan ketersediaan gagal, asumsikan arsip tersedia",
-      };
-    }
-  },
-
-  // ========== LEGACY METHOD (DEPRECATED - keep for backward compatibility) ==========
-  // @deprecated Use createSerahTerimaUsulan instead
-  async createSerahTerima(
-    data: SerahTerimaFormData
-  ): Promise<SerahTerimaRecord> {
-    console.warn(
-      "createSerahTerima is deprecated. Use createSerahTerimaUsulan instead."
-    );
-    // Convert old format to new format
-    return this.createSerahTerimaUsulan({
-      pihakPenyerah: data.pihakPenyerah,
-      pihakPenerima: data.pihakPenerima,
-      archiveId: data.archiveId,
-    });
   },
 };

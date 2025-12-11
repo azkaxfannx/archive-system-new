@@ -6,24 +6,9 @@ import { requireAuth } from "@/utils/withAuth";
 // GET - Fetch archives with pagination and filters
 export async function GET(req: NextRequest) {
   try {
-    console.log("=== ARCHIVES API DEBUG ===");
-    console.log("Headers:", Object.fromEntries(req.headers.entries()));
-    console.log("Cookies:", Object.fromEntries(req.cookies));
-
-    const authToken = req.cookies.get("auth-token")?.value;
-    console.log("Auth token found:", authToken ? "YES" : "NO");
-
     const { user, error } = requireAuth(req);
-    console.log("Auth result:", { user: !!user, error: !!error });
+    if (error) return error;
 
-    if (error) {
-      console.log("Auth failed, returning error");
-      return error;
-    }
-
-    console.log("Auth successful, user:", user);
-
-    // Rest of your existing code...
     const { searchParams } = new URL(req.url);
 
     const page = parseInt(searchParams.get("page") || "1");
@@ -33,7 +18,11 @@ export async function GET(req: NextRequest) {
     const sort = searchParams.get("sort") || "tanggal";
     const order = searchParams.get("order") || "desc";
 
-    // New filter parameters for period and year
+    // NEW: Exclude archives with approved serah terima
+    const excludeSerahTerima =
+      searchParams.get("excludeSerahTerima") === "true";
+
+    // Period and year filtering
     const startMonth = searchParams.get("startMonth");
     const endMonth = searchParams.get("endMonth");
     const filterYear = searchParams.get("year");
@@ -55,27 +44,36 @@ export async function GET(req: NextRequest) {
       where.status = status as any;
     }
 
+    // NEW: Exclude archives that have approved serah terima
+    if (excludeSerahTerima) {
+      where.serahTerimaArchives = {
+        none: {
+          serahTerima: {
+            statusUsulan: "APPROVED",
+          },
+        },
+      };
+    }
+
     // Period and Year filtering
     if (filterYear || startMonth || endMonth) {
       if (filterYear) {
         const year = parseInt(filterYear);
 
         if (startMonth && endMonth) {
-          // Filter by specific period within the year
-          const startMonthNum = parseInt(startMonth) - 1; // Month is 0-indexed
+          const startMonthNum = parseInt(startMonth) - 1;
           const endMonthNum = parseInt(endMonth) - 1;
 
           const periodStart = new Date(year, startMonthNum, 1);
-          const periodEnd = new Date(year, endMonthNum + 1, 0, 23, 59, 59); // Last day of end month
+          const periodEnd = new Date(year, endMonthNum + 1, 0, 23, 59, 59);
 
           where.tanggal = {
             gte: periodStart,
             lte: periodEnd,
           };
         } else {
-          // Filter by year only
-          const startDate = new Date(year, 0, 1); // January 1st
-          const endDate = new Date(year, 11, 31, 23, 59, 59); // December 31st
+          const startDate = new Date(year, 0, 1);
+          const endDate = new Date(year, 11, 31, 23, 59, 59);
 
           where.tanggal = {
             gte: startDate,
@@ -83,7 +81,6 @@ export async function GET(req: NextRequest) {
           };
         }
       } else if (startMonth && endMonth) {
-        // Filter by months across current year if no year specified
         const currentYear = new Date().getFullYear();
         const startMonthNum = parseInt(startMonth) - 1;
         const endMonthNum = parseInt(endMonth) - 1;
@@ -127,7 +124,6 @@ export async function GET(req: NextRequest) {
     const orderBy: Prisma.ArchiveOrderByWithRelationInput = {};
     switch (sort) {
       case "tanggal":
-        // Sort by tanggal surat, with fallback to entryDate for null values
         orderBy.tanggal = order as "asc" | "desc";
         break;
       case "nomorSurat":
@@ -143,7 +139,6 @@ export async function GET(req: NextRequest) {
         orderBy.status = order as "asc" | "desc";
         break;
       default:
-        // Fallback ke tanggal desc jika sort field tidak dikenali
         orderBy.tanggal = "desc";
     }
 
@@ -168,6 +163,18 @@ export async function GET(req: NextRequest) {
               id: true,
               name: true,
               role: true,
+            },
+          },
+          // NEW: Include serah terima info to check status
+          serahTerimaArchives: {
+            include: {
+              serahTerima: {
+                select: {
+                  id: true,
+                  statusUsulan: true,
+                  nomorBeritaAcara: true,
+                },
+              },
             },
           },
         },

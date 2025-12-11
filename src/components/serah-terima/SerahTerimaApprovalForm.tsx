@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, CheckCircle, Calendar, FileCheck } from "lucide-react";
+import { X, CheckCircle, Calendar } from "lucide-react";
 import { SerahTerimaRecord } from "@/types/archive";
 
 interface ApprovalFormData {
@@ -78,6 +78,21 @@ export default function SerahTerimaApprovalForm({
     }
   };
 
+  // FIXED: Get first archive if available
+  const getFirstArchiveInfo = () => {
+    if (!item.archives || item.archives.length === 0) {
+      return { judulBerkas: "-", nomorBerkas: item.nomorBerkas || "-" };
+    }
+
+    const firstArchive = item.archives[0];
+    return {
+      judulBerkas: firstArchive.archive?.judulBerkas || "-",
+      nomorBerkas: firstArchive.archive?.nomorBerkas || item.nomorBerkas || "-",
+    };
+  };
+
+  const firstArchive = getFirstArchiveInfo();
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[95vh] overflow-y-auto">
@@ -113,27 +128,39 @@ export default function SerahTerimaApprovalForm({
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
               <div>
-                <span className="font-medium text-blue-800">Pihak Penyerah:</span>
+                <span className="font-medium text-blue-800">
+                  Pihak Penyerah:
+                </span>
                 <span className="ml-2 text-blue-900">{item.pihakPenyerah}</span>
               </div>
               <div>
-                <span className="font-medium text-blue-800">Pihak Penerima:</span>
+                <span className="font-medium text-blue-800">
+                  Pihak Penerima:
+                </span>
                 <span className="ml-2 text-blue-900">{item.pihakPenerima}</span>
               </div>
               <div className="md:col-span-2">
-                <span className="font-medium text-blue-800">Berkas:</span>
+                <span className="font-medium text-blue-800">Arsip:</span>
                 <span className="ml-2 text-blue-900">
-                  {item.archive?.judulBerkas || "-"}
+                  {firstArchive.judulBerkas}
                 </span>
               </div>
               <div>
                 <span className="font-medium text-blue-800">Nomor Berkas:</span>
                 <span className="ml-2 text-blue-900">
-                  {item.archive?.nomorBerkas || "-"}
+                  {firstArchive.nomorBerkas}
                 </span>
               </div>
               <div>
-                <span className="font-medium text-blue-800">Tanggal Usulan:</span>
+                <span className="font-medium text-blue-800">Jumlah Arsip:</span>
+                <span className="ml-2 text-blue-900">
+                  {item.archives?.length || 0} arsip
+                </span>
+              </div>
+              <div>
+                <span className="font-medium text-blue-800">
+                  Tanggal Usulan:
+                </span>
                 <span className="ml-2 text-blue-900">
                   {formatDate(item.tanggalUsulan)}
                 </span>
@@ -150,7 +177,9 @@ export default function SerahTerimaApprovalForm({
               <input
                 type="text"
                 value={formData.nomorBeritaAcara}
-                onChange={(e) => handleChange("nomorBeritaAcara", e.target.value)}
+                onChange={(e) =>
+                  handleChange("nomorBeritaAcara", e.target.value)
+                }
                 className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent ${
                   errors.nomorBeritaAcara ? "border-red-500" : "border-gray-300"
                 }`}
@@ -172,9 +201,13 @@ export default function SerahTerimaApprovalForm({
               <input
                 type="date"
                 value={formData.tanggalSerahTerima}
-                onChange={(e) => handleChange("tanggalSerahTerima", e.target.value)}
+                onChange={(e) =>
+                  handleChange("tanggalSerahTerima", e.target.value)
+                }
                 className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent ${
-                  errors.tanggalSerahTerima ? "border-red-500" : "border-gray-300"
+                  errors.tanggalSerahTerima
+                    ? "border-red-500"
+                    : "border-gray-300"
                 }`}
                 disabled={loading}
               />

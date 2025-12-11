@@ -13,11 +13,25 @@ async function canAccessSerahTerima(
   user: { userId: string; role: "ADMIN" | "USER" }
 ) {
   if (user.role === "ADMIN") return true;
+
+  // FIXED: Access through archives (many-to-many)
   const serahTerima = await prisma.serahTerima.findUnique({
     where: { id },
-    select: { archive: { select: { userId: true } } },
+    include: {
+      archives: {
+        include: {
+          archive: {
+            select: { userId: true },
+          },
+        },
+      },
+    },
   });
-  return serahTerima?.archive.userId === user.userId;
+
+  // Check if any of the archives belong to the user
+  return serahTerima?.archives.some(
+    (stArchive) => stArchive.archive?.userId === user.userId
+  );
 }
 
 // GET - Get serah terima by ID
@@ -32,22 +46,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // FIXED: Use archives instead of archive
     const serahTerima = await prisma.serahTerima.findUnique({
       where: { id },
       include: {
-        archive: {
-          select: {
-            id: true,
-            judulBerkas: true,
-            nomorBerkas: true,
-            klasifikasi: true,
-            nomorSurat: true,
-            perihal: true,
-            tanggal: true,
-            tahun: true,
-            lokasiSimpan: true,
-            jenisNaskahDinas: true,
-            kondisi: true,
+        archives: {
+          include: {
+            archive: {
+              select: {
+                id: true,
+                judulBerkas: true,
+                nomorBerkas: true,
+                klasifikasi: true,
+                nomorSurat: true,
+                perihal: true,
+                tanggal: true,
+                tahun: true,
+                lokasiSimpan: true,
+                jenisNaskahDinas: true,
+                kondisi: true,
+              },
+            },
           },
         },
       },
@@ -140,21 +159,26 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       updateData.tanggalSerahTerima = new Date(data.tanggalSerahTerima);
     if (data.keterangan !== undefined)
       updateData.keterangan = data.keterangan || null;
+    if (data.nomorBerkas) updateData.nomorBerkas = data.nomorBerkas;
 
     const updatedSerahTerima = await prisma.serahTerima.update({
       where: { id },
       data: updateData,
       include: {
-        archive: {
-          select: {
-            id: true,
-            judulBerkas: true,
-            nomorBerkas: true,
-            klasifikasi: true,
-            nomorSurat: true,
-            perihal: true,
-            tanggal: true,
-            lokasiSimpan: true,
+        archives: {
+          include: {
+            archive: {
+              select: {
+                id: true,
+                judulBerkas: true,
+                nomorBerkas: true,
+                klasifikasi: true,
+                nomorSurat: true,
+                perihal: true,
+                tanggal: true,
+                lokasiSimpan: true,
+              },
+            },
           },
         },
       },
