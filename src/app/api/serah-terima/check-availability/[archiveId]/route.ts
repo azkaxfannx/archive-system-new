@@ -19,7 +19,7 @@ export async function GET(
     const { user, error } = requireAuth(request);
     if (error) return error;
 
-    // =============== YOUR LOGIC BELOW ===============
+    // =============== PERBAIKAN LOGIC ===============
 
     const archive = await prisma.archive.findUnique({
       where: { id: archiveId },
@@ -45,8 +45,12 @@ export async function GET(
       );
     }
 
+    // Check active peminjaman
     const activePeminjaman = await prisma.peminjaman.findFirst({
-      where: { archiveId, tanggalPengembalian: null },
+      where: {
+        archiveId,
+        tanggalPengembalian: null,
+      },
     });
 
     if (activePeminjaman) {
@@ -57,15 +61,35 @@ export async function GET(
       });
     }
 
-    const serahTerima = await prisma.serahTerima.findUnique({
-      where: { archiveId },
+    // PERBAIKAN: Check serah terima dengan many-to-many relationship
+    const serahTerimaArchive = await prisma.serahTerimaArchive.findFirst({
+      where: {
+        archiveId: archiveId,
+        serahTerima: {
+          OR: [{ statusUsulan: "PENDING" }, { statusUsulan: "APPROVED" }],
+        },
+      },
+      include: {
+        serahTerima: {
+          select: {
+            id: true,
+            statusUsulan: true,
+            nomorBeritaAcara: true,
+            tanggalSerahTerima: true,
+          },
+        },
+      },
     });
 
-    if (serahTerima) {
+    if (serahTerimaArchive) {
       return NextResponse.json({
         available: false,
-        reason: "Arsip sudah diserahterimakan",
-        serahTerimaDetail: serahTerima,
+        reason: `Arsip ${
+          serahTerimaArchive.serahTerima.statusUsulan === "APPROVED"
+            ? "sudah diserahterimakan"
+            : "sudah ada usulan serah terima"
+        }`,
+        serahTerimaDetail: serahTerimaArchive.serahTerima,
       });
     }
 
