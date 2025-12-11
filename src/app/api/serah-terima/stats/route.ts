@@ -7,7 +7,7 @@ import { Prisma } from "@prisma/client";
 export async function GET() {
   const cookieStore = await cookies();
   const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  
+
   if (!token) {
     return NextResponse.json(
       { error: "Unauthorized - Please login first" },
@@ -30,9 +30,19 @@ export async function GET() {
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
 
-  // Base filter for USER role
+  // PERBAIKAN: Base filter for USER role menggunakan many-to-many
   const baseWhere: Prisma.SerahTerimaWhereInput =
-    role === "ADMIN" ? {} : { archive: { userId } };
+    role === "ADMIN"
+      ? {}
+      : {
+          archives: {
+            some: {
+              archive: {
+                userId: userId,
+              },
+            },
+          },
+        };
 
   // Total count
   const totalCount = await prisma.serahTerima.count({
