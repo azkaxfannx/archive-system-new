@@ -24,10 +24,70 @@ interface SheetData {
   rows: any[][];
   totalRows: number;
   validRows: number;
+  invalidRows: number;
   headerRowIndex: number;
+  skippedRows: SkippedRowInfo[];
+}
+
+interface SkippedRowInfo {
+  rowNumber: number;
+  reason: string;
+  data: any[];
+  severity: "error" | "warning";
+  details?: {
+    kodeUnit?: any;
+    nomorSurat?: any;
+    nomorNaskahDinas?: any;
+    perihal?: any;
+    nomorBerkas?: any;
+  };
 }
 
 const MAX_PREVIEW_ROWS = 10;
+
+// Helper function to normalize header (sama seperti di API)
+const normalizeHeader = (header: string): string => {
+  if (!header) return "";
+  return header.toString().trim().toUpperCase();
+};
+
+// Helper function to get value by column name (sama seperti di API)
+const getValueByColumnName = (
+  row: any,
+  headers: string[],
+  normalizedHeaders: string[],
+  ...columnNames: string[]
+): any => {
+  for (const columnName of columnNames) {
+    const normalizedSearch = normalizeHeader(columnName);
+    const columnIndex = normalizedHeaders.findIndex((header: string) => {
+      const normalizedHeader = normalizeHeader(header);
+      const cleanedHeader = normalizedHeader
+        .replace(/\s*\([^)]*\)/g, "")
+        .trim();
+      const cleanedSearch = normalizedSearch
+        .replace(/\s*\([^)]*\)/g, "")
+        .trim();
+
+      return (
+        cleanedHeader.includes(cleanedSearch) ||
+        cleanedSearch.includes(cleanedHeader) ||
+        normalizedHeader.includes(normalizedSearch)
+      );
+    });
+
+    if (columnIndex !== -1) {
+      if (Array.isArray(row)) {
+        return row[columnIndex];
+      }
+      if (typeof row === "object" && row !== null) {
+        const originalHeader = headers[columnIndex];
+        return row[originalHeader];
+      }
+    }
+  }
+  return undefined;
+};
 
 // Helper function to find header row (sama seperti di API)
 const findHeaderRow = (sheetData: any[][]): number => {
@@ -61,6 +121,8 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
   const [error, setError] = useState<string>("");
   const [previewData, setPreviewData] = useState<SheetData[] | null>(null);
   const [expandedSheets, setExpandedSheets] = useState<Set<string>>(new Set());
+  const [showSkipped, setShowSkipped] = useState<Set<string>>(new Set());
+  const [showFailed, setShowFailed] = useState<Set<string>>(new Set());
   const [showPreview, setShowPreview] = useState(false);
 
   const validateFile = (file: File): boolean => {
@@ -117,7 +179,9 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                   rows: [],
                   totalRows: 0,
                   validRows: 0,
+                  invalidRows: 0,
                   headerRowIndex: -1,
+                  skippedRows: [],
                 });
                 return;
               }
@@ -126,13 +190,21 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                 String(h).trim()
               );
 
+              // Normalize headers for matching
+              const normalizedHeaders = headers.map((h) => normalizeHeader(h));
+
               // Get all rows after header
               const allRows = jsonData.slice(headerRowIndex + 1);
 
-              // Filter valid rows (not empty, not just numbers)
-              const validRows = allRows.filter((row) => {
-                // Skip empty rows
-                if (
+              // Track valid and skipped rows
+              const validRows: any[][] = [];
+              const skippedRows: SkippedRowInfo[] = [];
+
+              allRows.forEach((row, index) => {
+                const rowNumber = headerRowIndex + index + 2;
+
+                // Check if completely empty row
+                const isCompletelyEmpty =
                   !row ||
                   row.every(
                     (cell) =>
@@ -140,22 +212,121 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                       cell === undefined ||
                       cell === "" ||
                       (typeof cell === "string" && cell.trim() === "")
-                  )
-                ) {
-                  return false;
+                  );
+
+                if (isCompletelyEmpty) {
+                  skippedRows.push({
+                    rowNumber,
+                    reason: "Baris kosong",
+                    data: row || [],
+                    severity: "warning",
+                  });
+                  return;
                 }
 
-                // Skip rows that only contain numbers
-                const isNumberedRow = row.every((value) => {
-                  if (value === null || value === undefined || value === "")
-                    return false;
-                  const str = value.toString().trim();
-                  return !isNaN(Number(str)) && str !== "";
-                });
+                // Check if row only contains numbers (numbered row)
+                const hasAnyNonEmptyCell = row.some(
+                  (value) =>
+                    value !== null && value !== undefined && value !== ""
+                );
 
-                if (isNumberedRow) return false;
+                if (hasAnyNonEmptyCell) {
+                  const isNumberedRow = row.every((value) => {
+                    if (value === null || value === undefined || value === "")
+                      return true; // Empty cells are OK
+                    const str = value.toString().trim();
+                    return !isNaN(Number(str)) && str !== "";
+                  });
 
-                return true;
+                  if (isNumberedRow) {
+                    skippedRows.push({
+                      rowNumber,
+                      reason: "Baris hanya berisi angka (nomor urut)",
+                      data: row,
+                      severity: "warning",
+                    });
+                    return;
+                  }
+                }
+
+                // VALIDASI BACKEND: Check required fields
+                const kodeUnit = getValueByColumnName(
+                  row,
+                  headers,
+                  normalizedHeaders,
+                  "KODE UNIT"
+                );
+                const nomorSurat = getValueByColumnName(
+                  row,
+                  headers,
+                  normalizedHeaders,
+                  "NOMOR SURAT"
+                );
+                const nomorNaskahDinas = getValueByColumnName(
+                  row,
+                  headers,
+                  normalizedHeaders,
+                  "NOMOR NASKAH DINAS"
+                );
+                const perihal = getValueByColumnName(
+                  row,
+                  headers,
+                  normalizedHeaders,
+                  "PERIHAL"
+                );
+                const nomorBerkas = getValueByColumnName(
+                  row,
+                  headers,
+                  normalizedHeaders,
+                  "NOMOR BERKAS",
+                  "NO BOX SEMENTARA",
+                  "NOMOR DUS"
+                );
+
+                const hasKodeUnit =
+                  kodeUnit && kodeUnit.toString().trim() !== "";
+                const hasNomorSurat =
+                  nomorSurat && nomorSurat.toString().trim() !== "";
+                const hasNomorNaskahDinas =
+                  nomorNaskahDinas && nomorNaskahDinas.toString().trim() !== "";
+                const hasPerihal = perihal && perihal.toString().trim() !== "";
+
+                const errors: string[] = [];
+
+                if (!hasKodeUnit) {
+                  errors.push("KODE UNIT kosong atau tidak ditemukan");
+                }
+
+                if (!hasNomorSurat && !hasNomorNaskahDinas) {
+                  errors.push(
+                    "NOMOR SURAT dan NOMOR NASKAH DINAS keduanya kosong"
+                  );
+                }
+
+                if (!hasPerihal) {
+                  errors.push("PERIHAL kosong atau tidak ditemukan");
+                }
+
+                // Jika ada error, PASTI masukkan ke skipped dengan severity error
+                if (errors.length > 0) {
+                  skippedRows.push({
+                    rowNumber,
+                    reason: errors.join("; "),
+                    data: row,
+                    severity: "error",
+                    details: {
+                      kodeUnit: kodeUnit || "",
+                      nomorSurat: nomorSurat || "",
+                      nomorNaskahDinas: nomorNaskahDinas || "",
+                      perihal: perihal || "",
+                      nomorBerkas: nomorBerkas || "",
+                    },
+                  });
+                  return; // PENTING: return di sini jangan sampai masuk validRows
+                }
+
+                // Row is valid - hanya sampai sini jika tidak ada error
+                validRows.push(row);
               });
 
               // Limit preview rows
@@ -165,9 +336,11 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                 sheetName,
                 headers,
                 rows: previewRows,
-                totalRows: validRows.length,
+                totalRows: allRows.length,
                 validRows: validRows.length,
+                invalidRows: skippedRows.length,
                 headerRowIndex,
+                skippedRows: skippedRows.slice(0, 20), // Limit skipped rows preview to 20
               });
             }
           });
@@ -259,8 +432,42 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
     setExpandedSheets(newExpanded);
   };
 
+  const toggleSkipped = (sheetName: string) => {
+    const newShowSkipped = new Set(showSkipped);
+    if (newShowSkipped.has(sheetName)) {
+      newShowSkipped.delete(sheetName);
+    } else {
+      newShowSkipped.add(sheetName);
+    }
+    setShowSkipped(newShowSkipped);
+  };
+
+  const toggleFailed = (sheetName: string) => {
+    const newShowFailed = new Set(showFailed);
+    if (newShowFailed.has(sheetName)) {
+      newShowFailed.delete(sheetName);
+    } else {
+      newShowFailed.add(sheetName);
+    }
+    setShowFailed(newShowFailed);
+  };
+
   const totalValidRows =
     previewData?.reduce((sum, sheet) => sum + sheet.validRows, 0) || 0;
+  const totalInvalidRows =
+    previewData?.reduce((sum, sheet) => sum + sheet.invalidRows, 0) || 0;
+  const totalFailedRows =
+    previewData?.reduce(
+      (sum, sheet) =>
+        sum + sheet.skippedRows.filter((r) => r.severity === "error").length,
+      0
+    ) || 0;
+  const totalWarningRows =
+    previewData?.reduce(
+      (sum, sheet) =>
+        sum + sheet.skippedRows.filter((r) => r.severity === "warning").length,
+      0
+    ) || 0;
   const hasInvalidSheets =
     previewData?.some((sheet) => sheet.headerRowIndex === -1) || false;
 
@@ -339,8 +546,20 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                         Ditemukan {previewData.length} sheet dengan total{" "}
                         {totalValidRows} baris data valid
                       </p>
-                      {hasInvalidSheets && (
+                      {totalFailedRows > 0 && (
+                        <p className="text-sm text-red-700 font-medium mt-1">
+                          ❌ {totalFailedRows} baris GAGAL validasi (tidak akan
+                          diimport)
+                        </p>
+                      )}
+                      {totalWarningRows > 0 && (
                         <p className="text-sm text-yellow-700 mt-1">
+                          ⚠️ {totalWarningRows} baris diabaikan (kosong atau
+                          tidak valid)
+                        </p>
+                      )}
+                      {hasInvalidSheets && (
+                        <p className="text-sm text-red-700 mt-1">
                           ⚠️ Beberapa sheet tidak memiliki header yang valid
                         </p>
                       )}
@@ -362,9 +581,13 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                 </h4>
                 <ul className="text-sm text-blue-800 space-y-1">
                   <li>• Header sesuai template sistem</li>
-                  <li>• Kolom KODE UNIT, NOMOR SURAT, PERIHAL (wajib)</li>
+                  <li>
+                    • <strong>Kolom WAJIB:</strong> KODE UNIT, (NOMOR SURAT atau
+                    NOMOR NASKAH DINAS), PERIHAL
+                  </li>
                   <li>• Format tanggal: DD-MMM-YY atau YYYY-MM-DD</li>
                   <li>• Maksimal 1000 baris per upload</li>
+                  <li>• Baris dengan kolom wajib kosong akan gagal import</li>
                 </ul>
               </div>
 
@@ -398,8 +621,20 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                   <div>
                     <p className="font-medium text-gray-900">{file?.name}</p>
                     <p className="text-sm text-gray-600">
-                      {previewData.length} sheet • {totalValidRows} baris data
-                      valid
+                      {previewData.length} sheet •
+                      <span className="text-green-600 font-medium ml-1">
+                        {totalValidRows} valid
+                      </span>
+                      {totalFailedRows > 0 && (
+                        <span className="text-red-600 font-medium ml-1">
+                          • {totalFailedRows} gagal
+                        </span>
+                      )}
+                      {totalWarningRows > 0 && (
+                        <span className="text-yellow-600 ml-1">
+                          • {totalWarningRows} diabaikan
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -440,12 +675,42 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                               </span>
                             ) : (
                               <>
-                                {sheet.validRows} baris valid •{" "}
-                                {sheet.headers.length} kolom
+                                <span className="text-green-600 font-medium">
+                                  {sheet.validRows} valid
+                                </span>
+                                {sheet.skippedRows.filter(
+                                  (r) => r.severity === "error"
+                                ).length > 0 && (
+                                  <span className="text-red-600 font-medium ml-2">
+                                    •{" "}
+                                    {
+                                      sheet.skippedRows.filter(
+                                        (r) => r.severity === "error"
+                                      ).length
+                                    }{" "}
+                                    gagal
+                                  </span>
+                                )}
+                                {sheet.skippedRows.filter(
+                                  (r) => r.severity === "warning"
+                                ).length > 0 && (
+                                  <span className="text-yellow-600 ml-2">
+                                    •{" "}
+                                    {
+                                      sheet.skippedRows.filter(
+                                        (r) => r.severity === "warning"
+                                      ).length
+                                    }{" "}
+                                    diabaikan
+                                  </span>
+                                )}
+                                <span className="text-gray-500 ml-2">
+                                  • {sheet.headers.length} kolom
+                                </span>
                                 {sheet.totalRows > MAX_PREVIEW_ROWS && (
                                   <span className="text-gray-500 ml-2">
-                                    (menampilkan {MAX_PREVIEW_ROWS} dari{" "}
-                                    {sheet.totalRows})
+                                    (preview {MAX_PREVIEW_ROWS} dari{" "}
+                                    {sheet.validRows})
                                   </span>
                                 )}
                               </>
@@ -457,7 +722,7 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
 
                     {/* Sheet Content */}
                     {expandedSheets.has(sheet.sheetName) && (
-                      <div className="p-4 bg-white">
+                      <div className="p-4 bg-white space-y-4">
                         {sheet.headerRowIndex === -1 ? (
                           <div className="bg-red-50 border border-red-200 rounded p-3">
                             <p className="text-red-700 text-sm">
@@ -467,45 +732,295 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                             </p>
                           </div>
                         ) : (
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full text-xs">
-                              <thead>
-                                <tr className="bg-gray-100">
-                                  {sheet.headers.map((header, hIdx) => (
-                                    <th
-                                      key={hIdx}
-                                      className="px-3 py-2 text-left font-medium text-gray-700 border-b-2 border-gray-300 whitespace-nowrap"
-                                    >
-                                      {header}
-                                    </th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {sheet.rows.map((row, rIdx) => (
-                                  <tr
-                                    key={rIdx}
-                                    className={
-                                      rIdx % 2 === 0 ? "bg-white" : "bg-gray-50"
-                                    }
-                                  >
-                                    {row.map((cell, cIdx) => (
-                                      <td
-                                        key={cIdx}
-                                        className="px-3 py-2 border-b border-gray-200 text-gray-800 whitespace-nowrap"
+                          <>
+                            {/* Valid Data Table */}
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-2">
+                                Data Valid ({sheet.validRows} baris)
+                              </h4>
+                              <div className="overflow-x-auto border rounded">
+                                <table className="min-w-full text-xs">
+                                  <thead>
+                                    <tr className="bg-gray-100">
+                                      <th className="px-3 py-2 text-left font-medium text-gray-700 border-b-2 border-gray-300">
+                                        Row
+                                      </th>
+                                      {sheet.headers.map((header, hIdx) => (
+                                        <th
+                                          key={hIdx}
+                                          className="px-3 py-2 text-left font-medium text-gray-700 border-b-2 border-gray-300 whitespace-nowrap"
+                                        >
+                                          {header}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {sheet.rows.map((row, rIdx) => (
+                                      <tr
+                                        key={rIdx}
+                                        className={
+                                          rIdx % 2 === 0
+                                            ? "bg-white"
+                                            : "bg-gray-50"
+                                        }
                                       >
-                                        {cell !== null &&
-                                        cell !== undefined &&
-                                        cell !== ""
-                                          ? String(cell)
-                                          : "-"}
-                                      </td>
+                                        <td className="px-3 py-2 border-b border-gray-200 text-gray-500 font-mono text-xs">
+                                          {sheet.headerRowIndex + rIdx + 2}
+                                        </td>
+                                        {row.map((cell, cIdx) => (
+                                          <td
+                                            key={cIdx}
+                                            className="px-3 py-2 border-b border-gray-200 text-gray-800 whitespace-nowrap"
+                                          >
+                                            {cell !== null &&
+                                            cell !== undefined &&
+                                            cell !== ""
+                                              ? String(cell)
+                                              : "-"}
+                                          </td>
+                                        ))}
+                                      </tr>
                                     ))}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            {/* Failed Rows - ALWAYS VISIBLE if exists */}
+                            {sheet.skippedRows.filter(
+                              (r) => r.severity === "error"
+                            ).length > 0 && (
+                              <div className="border-t pt-4">
+                                <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center space-x-2">
+                                      <div className="bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
+                                        !
+                                      </div>
+                                      <div>
+                                        <h4 className="font-bold text-red-900">
+                                          Baris GAGAL Validasi (
+                                          {
+                                            sheet.skippedRows.filter(
+                                              (r) => r.severity === "error"
+                                            ).length
+                                          }{" "}
+                                          baris)
+                                        </h4>
+                                        <p className="text-xs text-red-700">
+                                          Baris ini TIDAK akan diimport karena
+                                          kolom wajib kosong
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() =>
+                                        toggleFailed(sheet.sheetName)
+                                      }
+                                      className="text-red-700 hover:text-red-800 text-sm font-medium"
+                                    >
+                                      {showFailed.has(sheet.sheetName)
+                                        ? "Sembunyikan"
+                                        : "Lihat Detail"}
+                                    </button>
+                                  </div>
+
+                                  {showFailed.has(sheet.sheetName) && (
+                                    <div className="space-y-2">
+                                      {sheet.skippedRows
+                                        .filter((r) => r.severity === "error")
+                                        .map((failed, idx) => (
+                                          <div
+                                            key={idx}
+                                            className="bg-white border border-red-300 rounded p-3 text-xs"
+                                          >
+                                            <div className="flex items-start justify-between mb-2">
+                                              <span className="font-medium text-red-900">
+                                                Baris {failed.rowNumber}
+                                              </span>
+                                              <span className="text-xs font-medium px-2 py-1 rounded bg-red-600 text-white">
+                                                GAGAL IMPORT
+                                              </span>
+                                            </div>
+
+                                            <p className="mb-2 text-xs text-red-700 font-medium">
+                                              ❌ {failed.reason}
+                                            </p>
+
+                                            {failed.details && (
+                                              <div className="bg-gray-50 rounded p-2 border border-gray-200">
+                                                <p className="text-xs font-medium text-gray-700 mb-1">
+                                                  Data Kolom Wajib:
+                                                </p>
+                                                <div className="grid grid-cols-2 gap-1 text-xs">
+                                                  <div>
+                                                    <span className="text-gray-500">
+                                                      KODE UNIT:
+                                                    </span>
+                                                    <span
+                                                      className={`ml-1 font-mono ${
+                                                        !failed.details
+                                                          .kodeUnit ||
+                                                        failed.details.kodeUnit
+                                                          .toString()
+                                                          .trim() === ""
+                                                          ? "text-red-600 font-bold italic"
+                                                          : "text-gray-800"
+                                                      }`}
+                                                    >
+                                                      {failed.details
+                                                        .kodeUnit || "KOSONG"}
+                                                    </span>
+                                                  </div>
+                                                  <div>
+                                                    <span className="text-gray-500">
+                                                      NOMOR SURAT:
+                                                    </span>
+                                                    <span
+                                                      className={`ml-1 font-mono ${
+                                                        !failed.details
+                                                          .nomorSurat ||
+                                                        failed.details.nomorSurat
+                                                          .toString()
+                                                          .trim() === ""
+                                                          ? "text-red-600 font-bold italic"
+                                                          : "text-gray-800"
+                                                      }`}
+                                                    >
+                                                      {failed.details
+                                                        .nomorSurat || "KOSONG"}
+                                                    </span>
+                                                  </div>
+                                                  <div>
+                                                    <span className="text-gray-500">
+                                                      NOMOR NASKAH:
+                                                    </span>
+                                                    <span
+                                                      className={`ml-1 font-mono ${
+                                                        !failed.details
+                                                          .nomorNaskahDinas ||
+                                                        failed.details.nomorNaskahDinas
+                                                          .toString()
+                                                          .trim() === ""
+                                                          ? "text-red-600 font-bold italic"
+                                                          : "text-gray-800"
+                                                      }`}
+                                                    >
+                                                      {failed.details
+                                                        .nomorNaskahDinas ||
+                                                        "KOSONG"}
+                                                    </span>
+                                                  </div>
+                                                  <div>
+                                                    <span className="text-gray-500">
+                                                      PERIHAL:
+                                                    </span>
+                                                    <span
+                                                      className={`ml-1 font-mono ${
+                                                        !failed.details
+                                                          .perihal ||
+                                                        failed.details.perihal
+                                                          .toString()
+                                                          .trim() === ""
+                                                          ? "text-red-600 font-bold italic"
+                                                          : "text-gray-800"
+                                                      }`}
+                                                    >
+                                                      {failed.details.perihal
+                                                        ? failed.details.perihal.toString()
+                                                            .length > 30
+                                                          ? failed.details.perihal
+                                                              .toString()
+                                                              .substring(
+                                                                0,
+                                                                30
+                                                              ) + "..."
+                                                          : failed.details
+                                                              .perihal
+                                                        : "KOSONG"}
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Skipped Rows (Warnings) - Collapsible */}
+                            {sheet.skippedRows.filter(
+                              (r) => r.severity === "warning"
+                            ).length > 0 && (
+                              <div className="border-t pt-4">
+                                <button
+                                  onClick={() => toggleSkipped(sheet.sheetName)}
+                                  className="flex items-center space-x-2 text-sm font-medium text-yellow-700 hover:text-yellow-800"
+                                >
+                                  {showSkipped.has(sheet.sheetName) ? (
+                                    <ChevronDown size={16} />
+                                  ) : (
+                                    <ChevronRight size={16} />
+                                  )}
+                                  <span>
+                                    Baris yang Diabaikan (
+                                    {
+                                      sheet.skippedRows.filter(
+                                        (r) => r.severity === "warning"
+                                      ).length
+                                    }{" "}
+                                    baris)
+                                  </span>
+                                </button>
+
+                                {showSkipped.has(sheet.sheetName) && (
+                                  <div className="mt-3 space-y-2">
+                                    {sheet.skippedRows
+                                      .filter((r) => r.severity === "warning")
+                                      .map((skipped, idx) => (
+                                        <div
+                                          key={idx}
+                                          className="bg-yellow-50 border border-yellow-200 rounded p-3 text-xs"
+                                        >
+                                          <div className="flex items-start justify-between mb-2">
+                                            <span className="font-medium text-yellow-900">
+                                              Baris {skipped.rowNumber}
+                                            </span>
+                                            <span className="text-yellow-700 text-xs">
+                                              {skipped.reason}
+                                            </span>
+                                          </div>
+                                          <div className="flex flex-wrap gap-2">
+                                            {skipped.data.map(
+                                              (cell, cellIdx) => (
+                                                <span
+                                                  key={cellIdx}
+                                                  className="inline-block bg-white px-2 py-1 rounded border border-yellow-200"
+                                                >
+                                                  {cell !== null &&
+                                                  cell !== undefined &&
+                                                  cell !== "" ? (
+                                                    String(cell)
+                                                  ) : (
+                                                    <span className="text-gray-400 italic">
+                                                      empty
+                                                    </span>
+                                                  )}
+                                                </span>
+                                              )
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
