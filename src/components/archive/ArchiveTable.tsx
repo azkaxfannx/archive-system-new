@@ -274,7 +274,8 @@ export default function ArchiveTable({
       {/* Banner Filter dari StatsCards */}
       {(columnFilters.status ||
         columnFilters.jenisNaskahDinas ||
-        columnFilters.lokasiSimpan) && (
+        columnFilters.lokasiSimpan ||
+        columnFilters.nomorBerkas) && (
         <div className="px-6 py-2 bg-green-50 border-b border-green-200 flex justify-between items-center">
           <span className="text-sm text-green-800">
             Filter aktif:{" "}
@@ -287,6 +288,8 @@ export default function ArchiveTable({
                 `Jenis = ${columnFilters.jenisNaskahDinas}`,
               columnFilters.lokasiSimpan &&
                 `Kategori = ${columnFilters.lokasiSimpan.replace(/\.$/, "")}`,
+              columnFilters.nomorBerkas &&
+                `No. Berkas = ${columnFilters.nomorBerkas}`,
             ]
               .filter(Boolean)
               .join(" | ")}
@@ -296,6 +299,7 @@ export default function ArchiveTable({
               onColumnFilter("status", "");
               onColumnFilter("jenisNaskahDinas", "");
               onColumnFilter("lokasiSimpan", "");
+              onColumnFilter("nomorBerkas", "");
             }}
             className="text-xs text-red-600 hover:text-red-800 underline"
           >
@@ -455,6 +459,23 @@ export default function ArchiveTable({
                 }
                 className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Filter nomor surat..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Nomor Berkas
+              </label>
+              <input
+                type="text"
+                value={
+                  localFilters.nomorBerkas || columnFilters.nomorBerkas || ""
+                }
+                onChange={(e) =>
+                  handleInputChange("nomorBerkas", e.target.value)
+                }
+                className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Filter nomor berkas..."
               />
             </div>
 
@@ -642,7 +663,7 @@ export default function ArchiveTable({
                   <StatusBadge status={archive.status} />
                 </td>
 
-                {/* Aksi - REMOVED: Serah Terima button */}
+                {/* Aksi */}
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <div className="flex space-x-1">
                     <button
