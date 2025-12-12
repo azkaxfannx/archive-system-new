@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { X } from "lucide-react";
 import { ArchiveRecord, ArchiveFormData } from "@/types/archive";
 import {
-  JENIS_NASKAH_OPTIONS,
   TINGKAT_PERKEMBANGAN_OPTIONS,
   KONDISI_OPTIONS,
   RETENSI_AKTIF_OPTIONS,
@@ -18,7 +17,7 @@ export const DEFAULT_FORM_VALUES: ArchiveFormData = {
   nomorBerkas: "",
   nomorIsiBerkas: "",
   judulBerkas: "",
-  jenisNaskahDinas: JENIS_NASKAH_OPTIONS[0],
+  jenisNaskahDinas: "",
   nomorSurat: "",
   klasifikasi: "",
   perihal: "",
@@ -52,8 +51,7 @@ export default function ArchiveForm({
       ? {
           ...DEFAULT_FORM_VALUES,
           ...archive,
-          jenisNaskahDinas:
-            archive.jenisNaskahDinas || DEFAULT_FORM_VALUES.jenisNaskahDinas,
+          jenisNaskahDinas: archive.jenisNaskahDinas || "",
           lokasiSimpan:
             archive.lokasiSimpan || DEFAULT_FORM_VALUES.lokasiSimpan,
           // ✅ KEEP: Untuk edit, tetap tampilkan entryDate yang sudah ada (readonly)
@@ -143,7 +141,7 @@ export default function ArchiveForm({
                   className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     errors.kodeUnit ? "border-red-500" : "border-gray-300"
                   }`}
-                  placeholder="Contoh: Pelabuhan Tanjung Intan"
+                  placeholder="Contoh: Tanjung Intan"
                 />
                 {errors.kodeUnit && (
                   <p className="text-red-500 text-xs mt-1">{errors.kodeUnit}</p>
@@ -213,21 +211,17 @@ export default function ArchiveForm({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Jenis Naskah Dinas *
+                  Jenis Naskah Dinas
                 </label>
-                <select
-                  value={formData.jenisNaskahDinas || JENIS_NASKAH_OPTIONS[0]}
+                <input
+                  type="text"
+                  value={formData.jenisNaskahDinas || ""}
                   onChange={(e) =>
                     handleChange("jenisNaskahDinas", e.target.value)
                   }
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  {JENIS_NASKAH_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Contoh: Surat Masuk"
+                />
               </div>
             </div>
 

@@ -210,10 +210,25 @@ export async function POST(req: Request) {
           const hasNomorNaskahDinas =
             nomorNaskahDinas && nomorNaskahDinas.toString().trim() !== "";
 
+          // VALIDASI BARU: Check nomor berkas
+          const nomorBerkas = getValueByColumnName(rawRow, "NOMOR BERKAS");
+          const nomorDus = getValueByColumnName(rawRow, "NOMOR DUS");
+          const noBoxSementara = getValueByColumnName(
+            rawRow,
+            "NO BOX SEMENTARA"
+          );
+
+          const hasNomorBerkas =
+            nomorBerkas && nomorBerkas.toString().trim() !== "";
+          const hasNomorDus = nomorDus && nomorDus.toString().trim() !== "";
+          const hasNoBoxSementara =
+            noBoxSementara && noBoxSementara.toString().trim() !== "";
+
           if (
             !kodeUnit ||
             (!hasNomorSurat && !hasNomorNaskahDinas) ||
-            !perihal
+            !perihal ||
+            (!hasNomorBerkas && !hasNomorDus && !hasNoBoxSementara)
           ) {
             continue; // Skip invalid rows in validation phase
           }
@@ -381,13 +396,25 @@ export async function POST(req: Request) {
           const hasNomorNaskahDinas =
             nomorNaskahDinas && nomorNaskahDinas.toString().trim() !== "";
 
+          // VALIDASI NOMOR BERKAS - ambil yang ada
+          const nomorBerkasValue = getValueByColumnName(
+            rawRow,
+            "NOMOR BERKAS",
+            "NO BOX SEMENTARA",
+            "NOMOR DUS"
+          );
+
+          const hasNomorBerkasValue =
+            nomorBerkasValue && nomorBerkasValue.toString().trim() !== "";
+
           if (
             !kodeUnit ||
             (!hasNomorSurat && !hasNomorNaskahDinas) ||
-            !perihal
+            !perihal ||
+            !hasNomorBerkasValue
           ) {
             throw new Error(
-              "Kolom KODE UNIT, (NOMOR SURAT atau NOMOR NASKAH DINAS), dan PERIHAL wajib diisi"
+              "Kolom KODE UNIT, (NOMOR SURAT atau NOMOR NASKAH DINAS), PERIHAL, dan (NOMOR BERKAS/NOMOR DUS/NO BOX SEMENTARA) wajib diisi"
             );
           }
 
@@ -468,15 +495,7 @@ export async function POST(req: Request) {
           const archiveData = {
             kodeUnit: sanitizeString(kodeUnit) || "",
             indeks: sanitizeString(getValueByColumnName(rawRow, "INDEKS")),
-            nomorBerkas:
-              sanitizeString(
-                getValueByColumnName(
-                  rawRow,
-                  "NOMOR BERKAS",
-                  "NO BOX SEMENTARA",
-                  "NOMOR DUS"
-                )
-              ) || "",
+            nomorBerkas: sanitizeString(nomorBerkasValue) || "",
             judulBerkas: sanitizeString(
               getValueByColumnName(rawRow, "JUDUL BERKAS")
             ),
@@ -535,6 +554,11 @@ export async function POST(req: Request) {
           if (!archiveData.perihal.trim()) {
             throw new Error("Perihal tidak boleh kosong");
           }
+          if (!archiveData.nomorBerkas.trim()) {
+            throw new Error(
+              "Nomor Berkas/Nomor Dus/No Box Sementara tidak boleh kosong"
+            );
+          }
 
           await prisma.archive.create({
             data: archiveData,
@@ -553,6 +577,10 @@ export async function POST(req: Request) {
                 getValueByColumnName(rawRow, "NOMOR SURAT") ||
                 getValueByColumnName(rawRow, "NOMOR NASKAH DINAS"),
               perihal: getValueByColumnName(rawRow, "PERIHAL"),
+              nomorBerkas:
+                getValueByColumnName(rawRow, "NOMOR BERKAS") ||
+                getValueByColumnName(rawRow, "NOMOR DUS") ||
+                getValueByColumnName(rawRow, "NO BOX SEMENTARA"),
             },
           });
         }

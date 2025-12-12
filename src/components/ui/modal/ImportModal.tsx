@@ -290,6 +290,8 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                 const hasNomorNaskahDinas =
                   nomorNaskahDinas && nomorNaskahDinas.toString().trim() !== "";
                 const hasPerihal = perihal && perihal.toString().trim() !== "";
+                const hasNomorBerkas =
+                  nomorBerkas && nomorBerkas.toString().trim() !== "";
 
                 const errors: string[] = [];
 
@@ -305,6 +307,12 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
 
                 if (!hasPerihal) {
                   errors.push("PERIHAL kosong atau tidak ditemukan");
+                }
+
+                if (!hasNomorBerkas) {
+                  errors.push(
+                    "NOMOR BERKAS/NOMOR DUS/NO BOX SEMENTARA kosong atau tidak ditemukan"
+                  );
                 }
 
                 // Jika ada error, PASTI masukkan ke skipped dengan severity error
@@ -583,7 +591,8 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                   <li>• Header sesuai template sistem</li>
                   <li>
                     • <strong>Kolom WAJIB:</strong> KODE UNIT, (NOMOR SURAT atau
-                    NOMOR NASKAH DINAS), PERIHAL
+                    NOMOR NASKAH DINAS), PERIHAL, (NOMOR BERKAS atau NOMOR DUS
+                    atau NO BOX SEMENTARA)
                   </li>
                   <li>• Format tanggal: DD-MMM-YY atau YYYY-MM-DD</li>
                   <li>• Maksimal 1000 baris per upload</li>
@@ -939,6 +948,26 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                                                           : failed.details
                                                               .perihal
                                                         : "KOSONG"}
+                                                    </span>
+                                                  </div>
+                                                  <div className="col-span-2">
+                                                    <span className="text-gray-500">
+                                                      NOMOR BERKAS:
+                                                    </span>
+                                                    <span
+                                                      className={`ml-1 font-mono ${
+                                                        !failed.details
+                                                          .nomorBerkas ||
+                                                        failed.details.nomorBerkas
+                                                          .toString()
+                                                          .trim() === ""
+                                                          ? "text-red-600 font-bold italic"
+                                                          : "text-gray-800"
+                                                      }`}
+                                                    >
+                                                      {failed.details
+                                                        .nomorBerkas ||
+                                                        "KOSONG"}
                                                     </span>
                                                   </div>
                                                 </div>
