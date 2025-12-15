@@ -1,7 +1,9 @@
+// app/api/archives/stats/route.ts
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { AUTH_COOKIE_NAME, verifyToken } from "@/utils/auth";
+import { calculateArchiveStatus } from "@/utils/calculateArchiveStatus";
 
 export async function GET() {
   const cookieStore = await cookies();
@@ -24,44 +26,61 @@ export async function GET() {
   const userId = payload.userId;
   const role = payload.role;
 
-  // Kalau ADMIN → tidak ada filter ({}), kalau USER → filter berdasarkan userId
+  // Filter berdasarkan role
   const baseWhere = role === "ADMIN" ? {} : { userId };
 
-  // Stats arsip seperti biasa
-  const totalCount = await prisma.archive.count({ where: baseWhere });
-  const activeCount = await prisma.archive.count({
-    where: { ...baseWhere, status: "ACTIVE" },
-  });
-  const inactiveCount = await prisma.archive.count({
-    where: { ...baseWhere, status: "INACTIVE" },
-  });
-  const disposeCount = await prisma.archive.count({
-    where: { ...baseWhere, status: "DISPOSE_ELIGIBLE" },
-  });
-
-  // Hitung distribusi jenisNaskahDinas
-  const jenisStats = await prisma.archive.groupBy({
-    by: ["jenisNaskahDinas"],
-    _count: { jenisNaskahDinas: true },
-    where: baseWhere,
-  });
-
-  // Format response
-  const jenisNaskahDinasData = jenisStats.map((j) => ({
-    jenis: j.jenisNaskahDinas || "Lainnya",
-    total: j._count.jenisNaskahDinas,
-  }));
-
-  // Ambil semua arsip untuk menghitung box
+  // Ambil SEMUA arsip dengan tanggal dan klasifikasi untuk perhitungan status
   const allArchives = await prisma.archive.findMany({
     where: baseWhere,
     select: {
+      id: true,
+      tanggal: true,
+      klasifikasi: true,
       nomorBerkas: true,
+      jenisNaskahDinas: true,
     },
   });
 
-  // Parse nomorBerkas dan hitung box per kategori (dari prefix nomorBerkas)
-  const boxStats = allArchives.reduce((acc, archive) => {
+  // Hitung status secara real-time berdasarkan tanggal dan klasifikasi
+  let activeCount = 0;
+  let inactiveCount = 0;
+  let disposeCount = 0;
+
+  const archivesWithStatus = allArchives.map((archive) => {
+    const statusCalc = calculateArchiveStatus(
+      archive.tanggal,
+      archive.klasifikasi
+    );
+
+    // Count berdasarkan status yang dihitung
+    if (statusCalc.status === "ACTIVE") activeCount++;
+    else if (statusCalc.status === "INACTIVE") inactiveCount++;
+    else if (statusCalc.status === "DISPOSE_ELIGIBLE") disposeCount++;
+
+    return {
+      ...archive,
+      calculatedStatus: statusCalc.status,
+    };
+  });
+
+  const totalCount = allArchives.length;
+
+  // Hitung distribusi jenisNaskahDinas
+  const jenisStatsMap = new Map<string, number>();
+  archivesWithStatus.forEach((archive) => {
+    const jenis = archive.jenisNaskahDinas || "Lainnya";
+    jenisStatsMap.set(jenis, (jenisStatsMap.get(jenis) || 0) + 1);
+  });
+
+  const jenisNaskahDinasData = Array.from(jenisStatsMap.entries()).map(
+    ([jenis, total]) => ({
+      jenis,
+      total,
+    })
+  );
+
+  // Parse nomorBerkas dan hitung box per kategori
+  const boxStats = archivesWithStatus.reduce((acc, archive) => {
     let kategori = "UMUM";
     let boxNum: number | null = null;
 
@@ -96,14 +115,8 @@ export async function GET() {
       if (!acc[kategori]) {
         acc[kategori] = new Set<number>();
       }
-
-      // Tambahkan nomor box ke Set (unik)
       acc[kategori].add(boxNum);
     }
-
-    // Jika nomorBerkas null/kosong atau tidak valid, tetap masuk kategori UMUM
-    // Tapi tidak menambahkan box karena tidak ada nomor box yang valid
-    // (Ini sesuai dengan logika sebelumnya)
 
     return acc;
   }, {} as Record<string, Set<number>>);
@@ -117,9 +130,8 @@ export async function GET() {
       totalBoxCount += totalBox;
 
       // Hitung total arsip untuk kategori ini
-      const totalArchives = allArchives.filter((archive) => {
+      const totalArchives = archivesWithStatus.filter((archive) => {
         if (!archive.nomorBerkas) {
-          // Arsip tanpa nomorBerkas masuk kategori UMUM
           return kategori === "UMUM";
         }
 
@@ -130,7 +142,6 @@ export async function GET() {
           const archiveKategori = parts[0];
           return archiveKategori === kategori;
         } else {
-          // Arsip dengan nomorBerkas tanpa titik masuk kategori UMUM
           return kategori === "UMUM";
         }
       }).length;
@@ -144,7 +155,7 @@ export async function GET() {
   );
 
   return NextResponse.json({
-    // Stats arsip
+    // Stats arsip dengan perhitungan real-time
     totalCount,
     activeCount,
     inactiveCount,
@@ -154,6 +165,7 @@ export async function GET() {
     totalBoxCount,
     boxStatsByCategory,
 
+    // Stats jenis naskah dinas
     jenisNaskahDinasData,
   });
 }

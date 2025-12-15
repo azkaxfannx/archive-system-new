@@ -45,6 +45,7 @@ export const KONDISI_OPTIONS = [
   "Hilang",
 ];
 
+// PASTIKAN: Format konsisten dengan spasi dan kapital
 export const RETENSI_AKTIF_OPTIONS = [
   "1 Tahun",
   "2 Tahun",
@@ -61,7 +62,7 @@ export const RETENSI_INAKTIF_OPTIONS = [
   "Serah ke Arsip Nasional",
 ];
 
-// Default form values
+// Default form values - Pastikan sama dengan RETENSI_AKTIF_OPTIONS
 export const DEFAULT_FORM_VALUES = {
   kodeUnit: "",
   indeks: "",
@@ -79,7 +80,7 @@ export const DEFAULT_FORM_VALUES = {
   tingkatPerkembangan: "Asli",
   kondisi: "Baik",
   lokasiSimpan: "",
-  retensiAktif: "2 Tahun",
+  retensiAktif: "2 Tahun", // PASTIKAN: "2 Tahun" bukan "2 tahun"
   retensiInaktif: "Tekstual",
   retentionYears: 2,
   keterangan: "",

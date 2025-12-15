@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { ArchiveRecord, ArchiveFormData } from "@/types/archive";
 import {
@@ -9,8 +9,13 @@ import {
   RETENSI_AKTIF_OPTIONS,
   RETENSI_INAKTIF_OPTIONS,
 } from "@/utils/constants";
+import {
+  calculateArchiveStatus,
+  getArchiveStatus,
+} from "@/utils/calculateArchiveStatus";
+import StatusBadge from "@/components/ui/StatusBadge";
 
-// ✅ FIXED: Remove entryDate from form values - akan di-generate otomatis
+// ✅ UPDATED: Status will be calculated automatically, not set manually
 export const DEFAULT_FORM_VALUES: ArchiveFormData = {
   kodeUnit: "",
   indeks: "",
@@ -22,14 +27,13 @@ export const DEFAULT_FORM_VALUES: ArchiveFormData = {
   klasifikasi: "",
   perihal: "",
   tanggal: new Date().toISOString().split("T")[0], // yyyy-mm-dd
-  // entryDate: REMOVED - akan di-set otomatis di backend
   tingkatPerkembangan: TINGKAT_PERKEMBANGAN_OPTIONS[0],
   kondisi: KONDISI_OPTIONS[0],
   lokasiSimpan: "",
-  retensiAktif: RETENSI_AKTIF_OPTIONS[0],
+  retensiAktif: "2 Tahun", // Pastikan sama dengan format RETENSI_AKTIF_OPTIONS
   retensiInaktif: RETENSI_INAKTIF_OPTIONS[0],
   retentionYears: 2,
-  status: "ACTIVE",
+  // status: REMOVED - will be calculated automatically
   keterangan: "",
 };
 
@@ -46,19 +50,56 @@ export default function ArchiveForm({
   onCancel,
   loading = false,
 }: ArchiveFormProps) {
-  const [formData, setFormData] = useState<ArchiveFormData>(
-    archive
-      ? {
-          ...DEFAULT_FORM_VALUES,
-          ...archive,
-          jenisNaskahDinas: archive.jenisNaskahDinas || "",
-          lokasiSimpan:
-            archive.lokasiSimpan || DEFAULT_FORM_VALUES.lokasiSimpan,
-          // ✅ KEEP: Untuk edit, tetap tampilkan entryDate yang sudah ada (readonly)
-        }
-      : DEFAULT_FORM_VALUES
-  );
+  const [formData, setFormData] = useState<ArchiveFormData>(() => {
+    if (archive) {
+      // FIX 1: Tanggal - atasi timezone issue dengan fungsi yang tepat
+      const formattedTanggal = archive.tanggal
+        ? formatDateForInput(archive.tanggal)
+        : "";
+
+      // FIX 2: Pastikan retensiAktif sesuai dengan option yang tersedia
+      // Cari yang paling cocok dari RETENSI_AKTIF_OPTIONS
+      const getMatchingRetensiAktif = (value: string | undefined): string => {
+        if (!value) return "2 Tahun";
+
+        // Cari exact match dulu
+        const exactMatch = RETENSI_AKTIF_OPTIONS.find(
+          (option) => option.toLowerCase() === value.toLowerCase()
+        );
+        if (exactMatch) return exactMatch;
+
+        // Cari partial match
+        const partialMatch = RETENSI_AKTIF_OPTIONS.find((option) =>
+          option.includes(value.split(" ")[0])
+        );
+
+        return partialMatch || "2 Tahun";
+      };
+
+      return {
+        ...DEFAULT_FORM_VALUES,
+        ...archive,
+        tanggal: formattedTanggal,
+        jenisNaskahDinas: archive.jenisNaskahDinas || "",
+        lokasiSimpan: archive.lokasiSimpan || DEFAULT_FORM_VALUES.lokasiSimpan,
+        // FIX: Gunakan fungsi pencocokan untuk retensiAktif
+        retensiAktif: getMatchingRetensiAktif(archive.retensiAktif),
+        retensiInaktif: archive.retensiInaktif || RETENSI_INAKTIF_OPTIONS[0],
+        tingkatPerkembangan:
+          archive.tingkatPerkembangan || TINGKAT_PERKEMBANGAN_OPTIONS[0],
+        kondisi: archive.kondisi || KONDISI_OPTIONS[0],
+      };
+    }
+    return DEFAULT_FORM_VALUES;
+  });
+
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // NEW: Calculate status in real-time based on tanggal and klasifikasi
+  const calculatedStatus = calculateArchiveStatus(
+    formData.tanggal,
+    formData.klasifikasi
+  );
 
   const handleChange = (field: keyof ArchiveFormData, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -67,14 +108,40 @@ export default function ArchiveForm({
     }
   };
 
-  function formatDateTimeLocal(dateString: string) {
-    const date = new Date(dateString);
-    const offset = date.getTimezoneOffset();
-    const localDate = new Date(date.getTime() - offset * 60000);
-    return localDate.toISOString().slice(0, 16); // format yyyy-MM-ddTHH:mm
+  // FIX: Fungsi untuk format tanggal tanpa timezone issue
+  function formatDateForInput(dateString: string | Date): string {
+    try {
+      const date = new Date(dateString);
+
+      // Jika invalid date, return string kosong
+      if (isNaN(date.getTime())) {
+        console.warn("Invalid date:", dateString);
+        return "";
+      }
+
+      // Gunakan tanggal local, jangan gunakan UTC
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+
+      return `${year}-${month}-${day}`;
+    } catch (error) {
+      console.error("Error formatting date:", error);
+      return "";
+    }
   }
 
-  // ✅ FIXED: Remove entryDate validation
+  function formatDateTimeLocal(dateString: string) {
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.kodeUnit?.trim())
@@ -84,7 +151,6 @@ export default function ArchiveForm({
     if (!formData.nomorSurat?.trim())
       newErrors.nomorSurat = "Nomor Surat wajib diisi";
     if (!formData.perihal?.trim()) newErrors.perihal = "Perihal wajib diisi";
-    // REMOVED: entryDate validation
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -94,8 +160,12 @@ export default function ArchiveForm({
     e.preventDefault();
     if (!validateForm()) return;
     try {
-      // ✅ Don't send entryDate for new records - backend will handle it
-      const submitData = { ...formData };
+      // ✅ Calculate and include status in submission
+      const submitData = {
+        ...formData,
+        status: calculatedStatus.status, // Add calculated status
+      };
+
       if (!archive) {
         // Untuk data baru, hapus entryDate agar backend yang generate
         delete submitData.entryDate;
@@ -262,6 +332,9 @@ export default function ArchiveForm({
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Contoh: HM.01.02.05"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  💡 Klasifikasi menentukan retensi inaktif otomatis
+                </p>
               </div>
 
               <div>
@@ -273,7 +346,11 @@ export default function ArchiveForm({
                   value={formData.tanggal || ""}
                   onChange={(e) => handleChange("tanggal", e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  max={new Date().toISOString().split("T")[0]} // Prevent future dates
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  💡 Tanggal menentukan status arsip otomatis
+                </p>
               </div>
 
               {/* ✅ CONDITIONAL: Show entryDate only for edit mode (readonly) */}
@@ -304,6 +381,59 @@ export default function ArchiveForm({
                   </p>
                 </div>
               )}
+
+              {/* NEW: Show calculated status preview */}
+              <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Status (Otomatis)
+                </label>
+                <div className="flex items-center justify-between">
+                  <StatusBadge status={calculatedStatus.status} />
+                  <span className="text-xs text-gray-600">
+                    {calculatedStatus.yearsFromDate.toFixed(1)} tahun
+                  </span>
+                </div>
+                <div className="mt-2 text-xs text-gray-600 space-y-1">
+                  <div className="flex justify-between">
+                    <span>Retensi Aktif:</span>
+                    <span className="font-medium">
+                      {calculatedStatus.retensiAktifYears} tahun
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Retensi Inaktif:</span>
+                    <span className="font-medium">
+                      {calculatedStatus.retensiInaktifYears} tahun
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-t pt-1">
+                    <span>Total Retensi:</span>
+                    <span className="font-semibold">
+                      {calculatedStatus.totalRetensiYears} tahun
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-2 text-xs">
+                  {calculatedStatus.isInActivePhase && (
+                    <span className="text-green-700 font-medium">
+                      📘 Fase Aktif (0-{calculatedStatus.retensiAktifYears}{" "}
+                      tahun)
+                    </span>
+                  )}
+                  {calculatedStatus.isInInactivePhase && (
+                    <span className="text-yellow-700 font-medium">
+                      📙 Fase Inaktif ({calculatedStatus.retensiAktifYears}-
+                      {calculatedStatus.totalRetensiYears} tahun)
+                    </span>
+                  )}
+                  {calculatedStatus.shouldBeDisposed && (
+                    <span className="text-red-700 font-medium">
+                      🔴 Siap Musnah (&gt;{calculatedStatus.totalRetensiYears}{" "}
+                      tahun)
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Column 3 - Arsip & Retensi */}
@@ -369,7 +499,7 @@ export default function ArchiveForm({
                   Retensi Aktif
                 </label>
                 <select
-                  value={formData.retensiAktif || RETENSI_AKTIF_OPTIONS[0]}
+                  value={formData.retensiAktif || "2 Tahun"}
                   onChange={(e) => handleChange("retensiAktif", e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
@@ -379,6 +509,9 @@ export default function ArchiveForm({
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Biasanya 2 tahun untuk semua kategori
+                </p>
               </div>
 
               <div>
@@ -414,6 +547,9 @@ export default function ArchiveForm({
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Ditentukan otomatis dari klasifikasi
+                </p>
               </div>
             </div>
           </div>

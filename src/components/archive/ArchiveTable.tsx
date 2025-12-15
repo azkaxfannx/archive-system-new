@@ -17,6 +17,7 @@ import {
 import { ArchiveRecord } from "@/types/archive";
 import StatusBadge from "@/components/ui/StatusBadge";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { getArchiveStatus } from "@/utils/calculateArchiveStatus";
 
 interface PeriodFilters {
   startMonth: string;
@@ -250,6 +251,11 @@ export default function ArchiveTable({
   };
 
   const canBorrow = (archiveId: string) => !activePeminjaman[archiveId];
+
+  // NEW: Function to get real-time calculated status
+  const getCalculatedStatus = (archive: ArchiveRecord) => {
+    return getArchiveStatus(archive.tanggal, archive.klasifikasi);
+  };
 
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -584,127 +590,134 @@ export default function ArchiveTable({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {archives.map((archive, index) => (
-              <tr
-                key={archive.id}
-                className={`hover:bg-blue-50 transition-colors ${getRowColorClass(
-                  index,
-                  archive.id
-                )}`}
-              >
-                {/* No. Surat */}
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-gray-900">
-                    {archive.nomorSurat}
-                    {!canBorrow(archive.id) && (
-                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                        Sedang Dipinjam
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-sm text-gray-500 truncate max-w-32">
-                    {archive.klasifikasi}
-                  </div>
-                </td>
+            {archives.map((archive, index) => {
+              // NEW: Calculate real-time status
+              const calculatedStatus = getCalculatedStatus(archive);
 
-                {/* Tgl Surat */}
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">
-                    {formatDocumentDate(archive.tanggal)}
-                  </div>
-                  <div className="text-sm text-gray-500">{archive.indeks}</div>
-                </td>
-
-                {/* No. Berkas */}
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-gray-900 max-w-32 truncate">
-                    {archive.nomorBerkas}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    {archive.jenisNaskahDinas}
-                  </div>
-                </td>
-
-                {/* Judul Berkas */}
-                <td className="px-6 py-4">
-                  <div className="text-sm text-gray-900 max-w-xs">
-                    <div className="truncate">{archive.judulBerkas}</div>
-                    <div className="text-sm text-gray-500 truncate">
-                      {archive.perihal}
+              return (
+                <tr
+                  key={archive.id}
+                  className={`hover:bg-blue-50 transition-colors ${getRowColorClass(
+                    index,
+                    archive.id
+                  )}`}
+                >
+                  {/* No. Surat */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">
+                      {archive.nomorSurat}
+                      {!canBorrow(archive.id) && (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                          Sedang Dipinjam
+                        </span>
+                      )}
                     </div>
-                  </div>
-                </td>
+                    <div className="text-sm text-gray-500 truncate max-w-32">
+                      {archive.klasifikasi}
+                    </div>
+                  </td>
 
-                {/* Lokasi Simpan */}
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">
-                    {archive.lokasiSimpan}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    {archive.tingkatPerkembangan} • {archive.kondisi}
-                  </div>
-                </td>
+                  {/* Tgl Surat */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {formatDocumentDate(archive.tanggal)}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {archive.indeks}
+                    </div>
+                  </td>
 
-                {/* Retensi */}
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">
-                    {archive.retentionYears} tahun
-                  </div>
-                </td>
+                  {/* No. Berkas */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900 max-w-32 truncate">
+                      {archive.nomorBerkas}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {archive.jenisNaskahDinas}
+                    </div>
+                  </td>
 
-                {/* Status */}
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <StatusBadge status={archive.status} />
-                </td>
+                  {/* Judul Berkas */}
+                  <td className="px-6 py-4">
+                    <div className="text-sm text-gray-900 max-w-xs">
+                      <div className="truncate">{archive.judulBerkas}</div>
+                      <div className="text-sm text-gray-500 truncate">
+                        {archive.perihal}
+                      </div>
+                    </div>
+                  </td>
 
-                {/* Aksi */}
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <div className="flex space-x-1">
-                    <button
-                      onClick={() => onView(archive)}
-                      className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
-                      title="Lihat Detail"
-                    >
-                      <Eye size={16} />
-                    </button>
+                  {/* Lokasi Simpan */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {archive.lokasiSimpan}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {archive.tingkatPerkembangan} • {archive.kondisi}
+                    </div>
+                  </td>
 
-                    {/* Conditional Pinjam Button */}
-                    {canBorrow(archive.id) ? (
+                  {/* Retensi */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {archive.retentionYears} tahun
+                    </div>
+                  </td>
+
+                  {/* Status - NOW USES CALCULATED STATUS */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <StatusBadge status={calculatedStatus} />
+                  </td>
+
+                  {/* Aksi */}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex space-x-1">
                       <button
-                        onClick={() => onPinjam(archive)}
-                        className="text-orange-600 hover:text-orange-900 p-1 rounded hover:bg-orange-50 transition-colors"
-                        title="Pinjam Berkas"
+                        onClick={() => onView(archive)}
+                        className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
+                        title="Lihat Detail"
                       >
-                        <BookOpen size={16} />
+                        <Eye size={16} />
                       </button>
-                    ) : (
-                      <button
-                        disabled
-                        className="text-gray-400 p-1 rounded cursor-not-allowed"
-                        title="Arsip sedang dipinjam"
-                      >
-                        <BookOpen size={16} />
-                      </button>
-                    )}
 
-                    <button
-                      onClick={() => onEdit(archive)}
-                      className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
-                      title="Edit"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button
-                      onClick={() => onDelete(archive.id)}
-                      className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
-                      title="Hapus"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      {/* Conditional Pinjam Button */}
+                      {canBorrow(archive.id) ? (
+                        <button
+                          onClick={() => onPinjam(archive)}
+                          className="text-orange-600 hover:text-orange-900 p-1 rounded hover:bg-orange-50 transition-colors"
+                          title="Pinjam Berkas"
+                        >
+                          <BookOpen size={16} />
+                        </button>
+                      ) : (
+                        <button
+                          disabled
+                          className="text-gray-400 p-1 rounded cursor-not-allowed"
+                          title="Arsip sedang dipinjam"
+                        >
+                          <BookOpen size={16} />
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => onEdit(archive)}
+                        className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
+                        title="Edit"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => onDelete(archive.id)}
+                        className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
+                        title="Hapus"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { ArchiveRecord } from "@/types/archive";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { getClassificationRule } from "@/utils/classificationRules";
+import { calculateArchiveStatus } from "@/utils/calculateArchiveStatus";
 
 interface ArchiveDetailModalProps {
   archive: ArchiveRecord;
@@ -31,6 +32,11 @@ export default function ArchiveDetailModal({
     if (!dateString) return "-";
     return new Date(dateString).toLocaleString("id-ID");
   };
+
+  // NEW: Calculate real-time status
+  const statusCalculation = useMemo(() => {
+    return calculateArchiveStatus(archive.tanggal, archive.klasifikasi);
+  }, [archive.tanggal, archive.klasifikasi]);
 
   // Calculate retensiInaktif from classification rules if not provided by backend
   const retensiInaktif = useMemo(() => {
@@ -140,7 +146,8 @@ export default function ArchiveDetailModal({
                   Status
                 </label>
                 <div className="mt-1">
-                  <StatusBadge status={archive.status} />
+                  {/* NEW: Use calculated status instead of database status */}
+                  <StatusBadge status={statusCalculation.status} />
                 </div>
               </div>
             </div>
@@ -258,29 +265,45 @@ export default function ArchiveDetailModal({
                     Retensi Aktif
                   </label>
                   <p className="mt-1 text-sm text-gray-900">
-                    {archive.retensiAktif || "2 tahun"}
+                    {statusCalculation.retensiAktifYears} tahun
                   </p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-600">
                     Retensi Inaktif
                   </label>
-                  <p className="mt-1 text-sm text-gray-900">{retensiInaktif}</p>
+                  <p className="mt-1 text-sm text-gray-900">
+                    {statusCalculation.retensiInaktifYears} tahun
+                  </p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-600">
                     Total Retensi
                   </label>
                   <p className="mt-1 text-sm text-gray-900">
-                    {totalRetensi !== "-" ? `${totalRetensi} tahun` : "-"}
+                    {statusCalculation.totalRetensiYears} tahun
                   </p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-600">
-                    Periode Retensi (Aktif)
+                    Umur Dokumen
                   </label>
                   <p className="mt-1 text-sm text-gray-900">
-                    {archive.retentionYears} Tahun
+                    {statusCalculation.yearsFromDate} tahun
+                  </p>
+                </div>
+                {/* NEW: Status phase indicator */}
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <label className="text-sm font-medium text-gray-600">
+                    Fase Saat Ini
+                  </label>
+                  <p className="mt-1 text-sm font-semibold text-blue-900">
+                    {statusCalculation.isInActivePhase &&
+                      "📘 Fase Aktif (0-2 tahun)"}
+                    {statusCalculation.isInInactivePhase &&
+                      `📙 Fase Inaktif (2-${statusCalculation.totalRetensiYears} tahun)`}
+                    {statusCalculation.shouldBeDisposed &&
+                      `🔴 Siap Musnah (>${statusCalculation.totalRetensiYears} tahun)`}
                   </p>
                 </div>
               </div>
@@ -309,7 +332,6 @@ export default function ArchiveDetailModal({
                   <p className="text-gray-900">
                     {formatDateTime(archive.createdAt)}
                   </p>
-                  {/* FIXED: Perbaikan kondisi untuk menampilkan nama uploader */}
                   {currentUserRole === "ADMIN" && archive.user?.name && (
                     <p className="text-xs text-gray-500 mt-1">
                       Oleh: {archive.user.name}
