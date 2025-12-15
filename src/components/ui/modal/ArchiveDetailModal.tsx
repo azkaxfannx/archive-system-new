@@ -1,9 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { X } from "lucide-react";
 import { ArchiveRecord } from "@/types/archive";
 import StatusBadge from "@/components/ui/StatusBadge";
+import { getClassificationRule } from "@/utils/classificationRules";
 
 interface ArchiveDetailModalProps {
   archive: ArchiveRecord;
@@ -31,13 +32,31 @@ export default function ArchiveDetailModal({
     return new Date(dateString).toLocaleString("id-ID");
   };
 
-  // Debug log untuk memeriksa data
-  // console.log("Archive data in detail modal:", {
-  //   currentUserRole,
-  //   archiveUser: archive.user,
-  //   hasUser: !!archive.user,
-  //   userName: archive.user?.name,
-  // });
+  // Calculate retensiInaktif from classification rules if not provided by backend
+  const retensiInaktif = useMemo(() => {
+    // If already provided from backend, use it
+    if (archive.retensiInaktif) return archive.retensiInaktif;
+
+    // Otherwise calculate from classification rules
+    if (archive.klasifikasi) {
+      const rule = getClassificationRule(archive.klasifikasi);
+      if (rule) {
+        return `${rule.retensiInaktif} tahun`;
+      }
+    }
+    return "-";
+  }, [archive.klasifikasi, archive.retensiInaktif]);
+
+  // Calculate total retensi (aktif + inaktif) if possible
+  const totalRetensi = useMemo(() => {
+    if (archive.klasifikasi) {
+      const rule = getClassificationRule(archive.klasifikasi);
+      if (rule) {
+        return rule.retensiAktif + rule.retensiInaktif;
+      }
+    }
+    return "-";
+  }, [archive.klasifikasi]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -239,23 +258,29 @@ export default function ArchiveDetailModal({
                     Retensi Aktif
                   </label>
                   <p className="mt-1 text-sm text-gray-900">
-                    {archive.retensiAktif || "-"}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-600">
-                    Periode Retensi
-                  </label>
-                  <p className="mt-1 text-sm text-gray-900">
-                    {archive.retentionYears} Tahun
+                    {archive.retensiAktif || "2 tahun"}
                   </p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-600">
                     Retensi Inaktif
                   </label>
+                  <p className="mt-1 text-sm text-gray-900">{retensiInaktif}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-600">
+                    Total Retensi
+                  </label>
                   <p className="mt-1 text-sm text-gray-900">
-                    {archive.retensiInaktif || "-"}
+                    {totalRetensi !== "-" ? `${totalRetensi} tahun` : "-"}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-600">
+                    Periode Retensi (Aktif)
+                  </label>
+                  <p className="mt-1 text-sm text-gray-900">
+                    {archive.retentionYears} Tahun
                   </p>
                 </div>
               </div>
@@ -290,14 +315,6 @@ export default function ArchiveDetailModal({
                       Oleh: {archive.user.name}
                     </p>
                   )}
-
-                  {/* Debug info - hapus setelah berhasil */}
-                  {/* {process.env.NODE_ENV === "development" && (
-                    <div className="text-xs text-red-500 mt-2">
-                      Debug: Role={currentUserRole}, HasUser={!!archive.user},
-                      UserName={archive.user?.name}
-                    </div>
-                  )} */}
                 </div>
                 <div>
                   <label className="font-medium text-gray-600">

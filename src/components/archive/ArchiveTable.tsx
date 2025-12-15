@@ -517,7 +517,8 @@ export default function ArchiveTable({
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 Jenis Naskah
               </label>
-              <select
+              <input
+                type="text"
                 value={
                   localFilters.jenisNaskahDinas ||
                   columnFilters.jenisNaskahDinas ||
@@ -527,15 +528,8 @@ export default function ArchiveTable({
                   handleInputChange("jenisNaskahDinas", e.target.value)
                 }
                 className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Semua Jenis</option>
-                <option value="Surat Masuk">Surat Masuk</option>
-                <option value="Surat Keluar">Surat Keluar</option>
-                <option value="Memo">Memo</option>
-                <option value="Laporan">Laporan</option>
-                <option value="SK">SK</option>
-                <option value="Notulen">Notulen</option>
-              </select>
+                placeholder="Filter jenis naskah..."
+              />
             </div>
 
             <div>

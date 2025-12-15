@@ -439,12 +439,18 @@ export default function ArchiveManagement() {
     }
   };
 
-  const handleImport = async (file: File) => {
+  // Update fungsi handleImport di ArchiveManagement.tsx
+
+  const handleImport = async (file: File, autoFix: boolean) => {
     try {
-      setPendingImportFile(file);
+      setIsLoading(true);
 
       const formData = new FormData();
       formData.append("file", file);
+
+      // Langsung kirim dengan autoFix parameter
+      formData.append("autoFix", autoFix.toString());
+      formData.append("forceImport", "true"); // Selalu true karena sudah preview
 
       const response = await fetch("/api/archives/import", {
         method: "POST",
@@ -454,26 +460,32 @@ export default function ArchiveManagement() {
 
       const result = await response.json();
 
-      if (result.hasRetentionMismatches) {
-        setRetentionMismatches(result.retentionMismatches);
-        setShowRetentionMismatchModal(true);
-        setShowImportModal(false);
-        return;
-      }
+      // Set message based on autoFix
+      const message = autoFix
+        ? "Import berhasil dengan masa retensi yang telah diperbaiki sesuai aturan klasifikasi"
+        : result.message || "Import berhasil";
 
-      setImportResult(result);
+      setImportResult({
+        ...result,
+        message,
+      });
       setShowImportResultModal(true);
       mutate();
+
+      // Refresh stats
       fetch("/api/archives/stats", {
         credentials: "include",
       })
         .then((res) => res.json())
         .then((data) => setStats(data));
+
       triggerHeaderRefresh();
       setShowImportModal(false);
     } catch (error) {
       console.error("Import error:", error);
       alert("Terjadi kesalahan saat mengimpor file!");
+    } finally {
+      setIsLoading(false);
     }
   };
 

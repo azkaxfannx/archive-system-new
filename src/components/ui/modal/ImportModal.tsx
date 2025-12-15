@@ -9,13 +9,30 @@ import {
   ChevronDown,
   ChevronRight,
   FileSpreadsheet,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { FILE_UPLOAD } from "@/utils/constants";
+import {
+  getClassificationRule,
+  validateRetentionFromExcel,
+  ClassificationRule,
+} from "@/utils/classificationRules";
 
 interface ImportModalProps {
   onClose: () => void;
-  onImport: (file: File) => Promise<void>;
+  onImport: (file: File, autoFix: boolean) => Promise<void>;
+}
+
+interface RetentionMismatchRow {
+  rowNumber: number;
+  classification: string;
+  currentRetensiAktif: number;
+  expectedRetensiAktif: number;
+  ruleName: string;
+  retensiInaktifInfo: number;
+  data: any[];
 }
 
 interface SheetData {
@@ -25,8 +42,10 @@ interface SheetData {
   totalRows: number;
   validRows: number;
   invalidRows: number;
+  retentionMismatchRows: number;
   headerRowIndex: number;
   skippedRows: SkippedRowInfo[];
+  retentionMismatches: RetentionMismatchRow[];
 }
 
 interface SkippedRowInfo {
@@ -45,13 +64,11 @@ interface SkippedRowInfo {
 
 const MAX_PREVIEW_ROWS = 10;
 
-// Helper function to normalize header (sama seperti di API)
 const normalizeHeader = (header: string): string => {
   if (!header) return "";
   return header.toString().trim().toUpperCase();
 };
 
-// Helper function to get value by column name (sama seperti di API)
 const getValueByColumnName = (
   row: any,
   headers: string[],
@@ -89,7 +106,6 @@ const getValueByColumnName = (
   return undefined;
 };
 
-// Helper function to find header row (sama seperti di API)
 const findHeaderRow = (sheetData: any[][]): number => {
   for (let i = 0; i < Math.min(sheetData.length, 20); i++) {
     const row = sheetData[i];
@@ -123,12 +139,15 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
   const [expandedSheets, setExpandedSheets] = useState<Set<string>>(new Set());
   const [showSkipped, setShowSkipped] = useState<Set<string>>(new Set());
   const [showFailed, setShowFailed] = useState<Set<string>>(new Set());
+  const [showRetentionMismatch, setShowRetentionMismatch] = useState<
+    Set<string>
+  >(new Set());
   const [showPreview, setShowPreview] = useState(false);
+  const [autoFixRetention, setAutoFixRetention] = useState(true);
 
   const validateFile = (file: File): boolean => {
     setError("");
 
-    // Check file size
     if (file.size > FILE_UPLOAD.MAX_SIZE) {
       setError(
         `File terlalu besar. Maksimal ${FILE_UPLOAD.MAX_SIZE / 1024 / 1024}MB`
@@ -136,7 +155,6 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
       return false;
     }
 
-    // Check file type
     const ext = file.name.includes(".") ? file.name.split(".").pop() : "";
     const fileExtension = ext ? "." + ext.toLowerCase() : "";
     if (!FILE_UPLOAD.ALLOWED_TYPES.includes(fileExtension as any)) {
@@ -169,7 +187,6 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
             }) as any[][];
 
             if (jsonData.length > 0) {
-              // Find header row
               const headerRowIndex = findHeaderRow(jsonData);
 
               if (headerRowIndex === -1) {
@@ -180,8 +197,10 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                   totalRows: 0,
                   validRows: 0,
                   invalidRows: 0,
+                  retentionMismatchRows: 0,
                   headerRowIndex: -1,
                   skippedRows: [],
+                  retentionMismatches: [],
                 });
                 return;
               }
@@ -189,16 +208,12 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
               const headers = jsonData[headerRowIndex].map((h) =>
                 String(h).trim()
               );
-
-              // Normalize headers for matching
               const normalizedHeaders = headers.map((h) => normalizeHeader(h));
-
-              // Get all rows after header
               const allRows = jsonData.slice(headerRowIndex + 1);
 
-              // Track valid and skipped rows
               const validRows: any[][] = [];
               const skippedRows: SkippedRowInfo[] = [];
+              const retentionMismatches: RetentionMismatchRow[] = [];
 
               allRows.forEach((row, index) => {
                 const rowNumber = headerRowIndex + index + 2;
@@ -224,7 +239,7 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                   return;
                 }
 
-                // Check if row only contains numbers (numbered row)
+                // Check if numbered row
                 const hasAnyNonEmptyCell = row.some(
                   (value) =>
                     value !== null && value !== undefined && value !== ""
@@ -233,7 +248,7 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                 if (hasAnyNonEmptyCell) {
                   const isNumberedRow = row.every((value) => {
                     if (value === null || value === undefined || value === "")
-                      return true; // Empty cells are OK
+                      return true;
                     const str = value.toString().trim();
                     return !isNaN(Number(str)) && str !== "";
                   });
@@ -249,7 +264,7 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                   }
                 }
 
-                // VALIDASI BACKEND: Check required fields
+                // Get required fields
                 const kodeUnit = getValueByColumnName(
                   row,
                   headers,
@@ -315,7 +330,7 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                   );
                 }
 
-                // Jika ada error, PASTI masukkan ke skipped dengan severity error
+                // If validation errors, add to skipped
                 if (errors.length > 0) {
                   skippedRows.push({
                     rowNumber,
@@ -330,14 +345,52 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                       nomorBerkas: nomorBerkas || "",
                     },
                   });
-                  return; // PENTING: return di sini jangan sampai masuk validRows
+                  return;
                 }
 
-                // Row is valid - hanya sampai sini jika tidak ada error
+                // CHECK RETENTION MISMATCH - HANYA RETENSI AKTIF
+                const classification = getValueByColumnName(
+                  row,
+                  headers,
+                  normalizedHeaders,
+                  "KLASIFIKASI"
+                );
+                const retensiAktif = getValueByColumnName(
+                  row,
+                  headers,
+                  normalizedHeaders,
+                  "RETENSI AKTIF"
+                );
+
+                if (classification && classification.toString().trim() !== "") {
+                  const classificationStr = classification.toString().trim();
+                  const retensiAktifValue =
+                    typeof retensiAktif === "number"
+                      ? retensiAktif
+                      : parseInt(retensiAktif?.toString() || "2") || 2;
+
+                  const validation = validateRetentionFromExcel(
+                    classificationStr,
+                    retensiAktifValue
+                  );
+
+                  if (!validation.valid && validation.rule) {
+                    retentionMismatches.push({
+                      rowNumber,
+                      classification: classificationStr,
+                      currentRetensiAktif: retensiAktifValue,
+                      expectedRetensiAktif: validation.rule.retensiAktif,
+                      ruleName: validation.rule.name,
+                      retensiInaktifInfo: validation.rule.retensiInaktif,
+                      data: row,
+                    });
+                  }
+                }
+
+                // Row is valid
                 validRows.push(row);
               });
 
-              // Limit preview rows
               const previewRows = validRows.slice(0, MAX_PREVIEW_ROWS);
 
               sheetsData.push({
@@ -347,8 +400,10 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                 totalRows: allRows.length,
                 validRows: validRows.length,
                 invalidRows: skippedRows.length,
+                retentionMismatchRows: retentionMismatches.length,
                 headerRowIndex,
-                skippedRows: skippedRows.slice(0, 20), // Limit skipped rows preview to 20
+                skippedRows: skippedRows.slice(0, 20),
+                retentionMismatches: retentionMismatches.slice(0, 20),
               });
             }
           });
@@ -378,7 +433,6 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
       const parsedData = await parseExcelFile(selectedFile);
       setPreviewData(parsedData);
 
-      // Auto expand first sheet
       if (parsedData.length > 0) {
         setExpandedSheets(new Set([parsedData[0].sheetName]));
       }
@@ -394,7 +448,7 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
 
     setImporting(true);
     try {
-      await onImport(file);
+      await onImport(file, autoFixRetention);
       onClose();
     } catch (error) {
       console.error("Import error:", error);
@@ -460,10 +514,23 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
     setShowFailed(newShowFailed);
   };
 
+  const toggleRetentionMismatch = (sheetName: string) => {
+    const newShow = new Set(showRetentionMismatch);
+    if (newShow.has(sheetName)) {
+      newShow.delete(sheetName);
+    } else {
+      newShow.add(sheetName);
+    }
+    setShowRetentionMismatch(newShow);
+  };
+
   const totalValidRows =
     previewData?.reduce((sum, sheet) => sum + sheet.validRows, 0) || 0;
   const totalInvalidRows =
     previewData?.reduce((sum, sheet) => sum + sheet.invalidRows, 0) || 0;
+  const totalRetentionMismatches =
+    previewData?.reduce((sum, sheet) => sum + sheet.retentionMismatchRows, 0) ||
+    0;
   const totalFailedRows =
     previewData?.reduce(
       (sum, sheet) =>
@@ -517,7 +584,7 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                       : "Drag & drop file Excel atau klik untuk memilih"}
                   </p>
                   <p className="text-xs text-gray-500">
-                    Format yang didukung: {FILE_UPLOAD.ALLOWED_TYPES.join(", ")}
+                    Format yang didukung: {FILE_UPLOAD.ALLOWED_TYPES.join(", ")}{" "}
                     (maksimal {FILE_UPLOAD.MAX_SIZE / 1024 / 1024}MB)
                   </p>
                   <input
@@ -556,8 +623,14 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                       </p>
                       {totalFailedRows > 0 && (
                         <p className="text-sm text-red-700 font-medium mt-1">
-                          ❌ {totalFailedRows} baris GAGAL validasi (tidak akan
+                          ✖ {totalFailedRows} baris GAGAL validasi (tidak akan
                           diimport)
+                        </p>
+                      )}
+                      {totalRetentionMismatches > 0 && (
+                        <p className="text-sm text-orange-700 font-medium mt-1">
+                          ⚠️ {totalRetentionMismatches} baris dengan retensi
+                          aktif tidak sesuai klasifikasi
                         </p>
                       )}
                       {totalWarningRows > 0 && (
@@ -599,25 +672,6 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                   <li>• Baris dengan kolom wajib kosong akan gagal import</li>
                 </ul>
               </div>
-
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <h4 className="font-medium text-yellow-900 mb-2">
-                  Validasi Klasifikasi & Masa Retensi:
-                </h4>
-                <ul className="text-sm text-yellow-800 space-y-1">
-                  <li>
-                    • Sistem akan memvalidasi masa retensi berdasarkan
-                    klasifikasi
-                  </li>
-                  <li>• Contoh: KU (Keuangan) = 10 tahun</li>
-                  <li>
-                    • Jika tidak sesuai, akan muncul konfirmasi untuk perbaikan
-                  </li>
-                  <li>
-                    • Anda dapat memilih perbaiki otomatis atau tetap lanjutkan
-                  </li>
-                </ul>
-              </div>
             </>
           )}
 
@@ -639,6 +693,11 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                           • {totalFailedRows} gagal
                         </span>
                       )}
+                      {totalRetentionMismatches > 0 && (
+                        <span className="text-orange-600 font-medium ml-1">
+                          • {totalRetentionMismatches} retensi mismatch
+                        </span>
+                      )}
                       {totalWarningRows > 0 && (
                         <span className="text-yellow-600 ml-1">
                           • {totalWarningRows} diabaikan
@@ -654,6 +713,76 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                   Kembali
                 </button>
               </div>
+
+              {/* Retention Mismatch Warning with Auto-fix Option */}
+              {totalRetentionMismatches > 0 && (
+                <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4">
+                  <div className="flex items-start space-x-3">
+                    <AlertCircle
+                      className="text-orange-600 flex-shrink-0 mt-1"
+                      size={20}
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium text-orange-900">
+                        Ditemukan {totalRetentionMismatches} baris dengan masa
+                        retensi aktif tidak sesuai klasifikasi
+                      </p>
+                      <p className="text-sm text-orange-700 mt-1">
+                        Pilih opsi import di bawah untuk menangani data ini
+                      </p>
+
+                      <div className="mt-3 space-y-2">
+                        <label className="flex items-start space-x-3 cursor-pointer p-3 rounded-lg border-2 transition-all hover:bg-orange-100 ${autoFixRetention ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-white'}">
+                          <input
+                            type="radio"
+                            name="retentionOption"
+                            checked={autoFixRetention}
+                            onChange={() => setAutoFixRetention(true)}
+                            className="mt-1 w-4 h-4 text-green-600"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <CheckCircle2
+                                size={16}
+                                className="text-green-600"
+                              />
+                              <span className="font-semibold text-green-900">
+                                Perbaiki otomatis (Disarankan)
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-700 mt-1">
+                              Sistem akan menggunakan retensi aktif (2 tahun)
+                              sesuai aturan klasifikasi yang berlaku
+                            </p>
+                          </div>
+                        </label>
+
+                        <label className="flex items-start space-x-3 cursor-pointer p-3 rounded-lg border-2 transition-all hover:bg-yellow-100 ${!autoFixRetention ? 'border-yellow-500 bg-yellow-50' : 'border-gray-200 bg-white'}">
+                          <input
+                            type="radio"
+                            name="retentionOption"
+                            checked={!autoFixRetention}
+                            onChange={() => setAutoFixRetention(false)}
+                            className="mt-1 w-4 h-4 text-yellow-600"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <XCircle size={16} className="text-yellow-600" />
+                              <span className="font-semibold text-yellow-900">
+                                Tetap gunakan dari Excel
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-700 mt-1">
+                              Import dengan retensi aktif dari file meskipun
+                              tidak sesuai aturan (Tidak disarankan)
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Sheets Preview */}
               <div className="space-y-3">
@@ -698,6 +827,12 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                                       ).length
                                     }{" "}
                                     gagal
+                                  </span>
+                                )}
+                                {sheet.retentionMismatchRows > 0 && (
+                                  <span className="text-orange-600 font-medium ml-2">
+                                    • {sheet.retentionMismatchRows} retensi
+                                    mismatch
                                   </span>
                                 )}
                                 {sheet.skippedRows.filter(
@@ -796,6 +931,110 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                               </div>
                             </div>
 
+                            {/* Retention Mismatch Section */}
+                            {sheet.retentionMismatches.length > 0 && (
+                              <div className="border-t pt-4">
+                                <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center space-x-2">
+                                      <div className="bg-orange-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
+                                        !
+                                      </div>
+                                      <div>
+                                        <h4 className="font-bold text-orange-900">
+                                          Retensi Aktif Tidak Sesuai Klasifikasi
+                                          ({sheet.retentionMismatches.length}{" "}
+                                          baris)
+                                        </h4>
+                                        <p className="text-xs text-orange-700">
+                                          {autoFixRetention
+                                            ? "Akan diperbaiki otomatis (2 tahun) saat import"
+                                            : "Akan diimport sesuai Excel (tidak sesuai aturan)"}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() =>
+                                        toggleRetentionMismatch(sheet.sheetName)
+                                      }
+                                      className="text-orange-700 hover:text-orange-800 text-sm font-medium"
+                                    >
+                                      {showRetentionMismatch.has(
+                                        sheet.sheetName
+                                      )
+                                        ? "Sembunyikan"
+                                        : "Lihat Detail"}
+                                    </button>
+                                  </div>
+
+                                  {showRetentionMismatch.has(
+                                    sheet.sheetName
+                                  ) && (
+                                    <div className="bg-white border border-orange-200 rounded overflow-x-auto">
+                                      <table className="min-w-full text-xs">
+                                        <thead className="bg-orange-100">
+                                          <tr>
+                                            <th className="px-3 py-2 text-left font-semibold text-orange-900">
+                                              Baris
+                                            </th>
+                                            <th className="px-3 py-2 text-left font-semibold text-orange-900">
+                                              Klasifikasi
+                                            </th>
+                                            <th className="px-3 py-2 text-left font-semibold text-orange-900">
+                                              Retensi Excel
+                                            </th>
+                                            <th className="px-3 py-2 text-left font-semibold text-orange-900">
+                                              Seharusnya
+                                            </th>
+                                            <th className="px-3 py-2 text-left font-semibold text-orange-900">
+                                              Retensi Inaktif
+                                            </th>
+                                            <th className="px-3 py-2 text-left font-semibold text-orange-900">
+                                              Aturan
+                                            </th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-orange-200">
+                                          {sheet.retentionMismatches.map(
+                                            (mismatch, idx) => (
+                                              <tr
+                                                key={idx}
+                                                className="hover:bg-orange-50"
+                                              >
+                                                <td className="px-3 py-2 font-medium text-gray-900">
+                                                  {mismatch.rowNumber}
+                                                </td>
+                                                <td className="px-3 py-2 text-blue-800 font-medium">
+                                                  {mismatch.classification}
+                                                </td>
+                                                <td className="px-3 py-2 text-red-600 font-semibold">
+                                                  {mismatch.currentRetensiAktif}{" "}
+                                                  tahun
+                                                </td>
+                                                <td className="px-3 py-2 text-green-600 font-semibold">
+                                                  {
+                                                    mismatch.expectedRetensiAktif
+                                                  }{" "}
+                                                  tahun
+                                                </td>
+                                                <td className="px-3 py-2 text-gray-600">
+                                                  {mismatch.retensiInaktifInfo}{" "}
+                                                  tahun
+                                                </td>
+                                                <td className="px-3 py-2 text-gray-700">
+                                                  {mismatch.ruleName}
+                                                </td>
+                                              </tr>
+                                            )
+                                          )}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
                             {/* Failed Rows - ALWAYS VISIBLE if exists */}
                             {sheet.skippedRows.filter(
                               (r) => r.severity === "error"
@@ -854,7 +1093,7 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
                                             </div>
 
                                             <p className="mb-2 text-xs text-red-700 font-medium">
-                                              ❌ {failed.reason}
+                                              ✖ {failed.reason}
                                             </p>
 
                                             {failed.details && (
@@ -1104,6 +1343,11 @@ export default function ImportModal({ onClose, onImport }: ImportModalProps) {
               <>
                 <Upload size={16} className="mr-2" />
                 Import {totalValidRows > 0 && `(${totalValidRows} baris)`}
+                {totalRetentionMismatches > 0 && (
+                  <span className="ml-2 text-xs">
+                    {autoFixRetention ? "• Auto-fix ON" : "• Use Excel values"}
+                  </span>
+                )}
               </>
             )}
           </button>

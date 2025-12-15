@@ -5,8 +5,8 @@ import { cookies } from "next/headers";
 import { AUTH_COOKIE_NAME, verifyToken } from "@/utils/auth";
 import {
   getClassificationRule,
-  validateRetentionYear,
-  RetentionMismatch,
+  validateRetentionFromExcel,
+  ClassificationRule,
 } from "@/utils/classificationRules";
 
 // Helper function to find header row
@@ -110,7 +110,15 @@ export async function POST(req: Request) {
     let success = 0;
     let failed = 0;
     const errors: any[] = [];
-    const retentionMismatches: (RetentionMismatch & { sheet: string })[] = [];
+    const retentionMismatches: {
+      row: number;
+      classification: string;
+      currentRetensiAktif: number;
+      expectedRetensiAktif: number;
+      ruleName: string;
+      retensiInaktifInfo: number;
+      sheet: string;
+    }[] = [];
     const batchEntryDate = new Date();
     let totalRows = 0;
 
@@ -138,27 +146,39 @@ export async function POST(req: Request) {
       );
 
       // Function untuk mendapatkan nilai berdasarkan nama kolom
-      const getValueByColumnName = (row: any, columnName: string): any => {
-        // Cari indeks kolom berdasarkan nama yang dinormalisasi
-        const columnIndex = normalizedHeaders.findIndex(
-          (header: string) =>
-            header.includes(normalizeHeader(columnName)) ||
-            normalizeHeader(columnName).includes(header)
-        );
+      const getValueByColumnName = (
+        row: any,
+        ...columnNames: string[]
+      ): any => {
+        for (const columnName of columnNames) {
+          const normalizedSearch = normalizeHeader(columnName);
+          const columnIndex = normalizedHeaders.findIndex((header: string) => {
+            const normalizedHeader = normalizeHeader(header);
+            // Matching lebih fleksibel - hapus tanda kurung dan kata-kata dalam kurung
+            const cleanedHeader = normalizedHeader
+              .replace(/\s*\([^)]*\)/g, "")
+              .trim();
+            const cleanedSearch = normalizedSearch
+              .replace(/\s*\([^)]*\)/g, "")
+              .trim();
 
-        if (columnIndex === -1) return undefined;
+            return (
+              cleanedHeader.includes(cleanedSearch) ||
+              cleanedSearch.includes(cleanedHeader) ||
+              normalizedHeader.includes(normalizedSearch)
+            );
+          });
 
-        // Ambil nilai dari baris data asli (bukan yang sudah diparsing)
-        if (Array.isArray(row)) {
-          return row[columnIndex];
+          if (columnIndex !== -1) {
+            if (Array.isArray(row)) {
+              return row[columnIndex];
+            }
+            if (typeof row === "object" && row !== null) {
+              const originalHeader = headers[columnIndex];
+              return row[originalHeader];
+            }
+          }
         }
-
-        // Jika row adalah object (dari sheet_to_json), coba akses dengan header asli
-        if (typeof row === "object" && row !== null) {
-          const originalHeader = headers[columnIndex];
-          return row[originalHeader];
-        }
-
         return undefined;
       };
 
@@ -211,24 +231,21 @@ export async function POST(req: Request) {
             nomorNaskahDinas && nomorNaskahDinas.toString().trim() !== "";
 
           // VALIDASI BARU: Check nomor berkas
-          const nomorBerkas = getValueByColumnName(rawRow, "NOMOR BERKAS");
-          const nomorDus = getValueByColumnName(rawRow, "NOMOR DUS");
-          const noBoxSementara = getValueByColumnName(
+          const nomorBerkas = getValueByColumnName(
             rawRow,
-            "NO BOX SEMENTARA"
+            "NOMOR BERKAS",
+            "NO BOX SEMENTARA",
+            "NOMOR DUS"
           );
 
           const hasNomorBerkas =
             nomorBerkas && nomorBerkas.toString().trim() !== "";
-          const hasNomorDus = nomorDus && nomorDus.toString().trim() !== "";
-          const hasNoBoxSementara =
-            noBoxSementara && noBoxSementara.toString().trim() !== "";
 
           if (
             !kodeUnit ||
             (!hasNomorSurat && !hasNomorNaskahDinas) ||
             !perihal ||
-            (!hasNomorBerkas && !hasNomorDus && !hasNoBoxSementara)
+            !hasNomorBerkas
           ) {
             continue; // Skip invalid rows in validation phase
           }
@@ -252,23 +269,25 @@ export async function POST(req: Request) {
           const classification = sanitizeString(
             getValueByColumnName(rawRow, "KLASIFIKASI")
           );
-          const retentionYears = parseRetentionYears(
+          const retensiAktif = parseRetentionYears(
             getValueByColumnName(rawRow, "RETENSI AKTIF")
           );
 
           // Check retention mismatch if classification exists
           if (classification && !forceImport) {
-            const rule = getClassificationRule(classification);
-            if (
-              rule &&
-              !validateRetentionYear(classification, retentionYears)
-            ) {
+            const validation = validateRetentionFromExcel(
+              classification,
+              retensiAktif
+            );
+
+            if (!validation.valid && validation.rule) {
               retentionMismatches.push({
                 row: rowIndex + headerRowIndex + 2,
                 classification: classification,
-                currentRetention: retentionYears,
-                expectedRetention: rule.retentionYears,
-                ruleName: rule.name,
+                currentRetensiAktif: retensiAktif,
+                expectedRetensiAktif: validation.rule.retensiAktif,
+                ruleName: validation.rule.name,
+                retensiInaktifInfo: validation.rule.retensiInaktif,
                 sheet: sheetName,
               });
             }
@@ -287,7 +306,8 @@ export async function POST(req: Request) {
           hasRetentionMismatches: true,
           retentionMismatches: retentionMismatches,
           totalRows: totalRows,
-          message: "Ditemukan ketidaksesuaian masa retensi dengan klasifikasi",
+          message:
+            "Ditemukan ketidaksesuaian masa retensi aktif dengan klasifikasi",
         },
         { status: 422 }
       );
@@ -479,15 +499,15 @@ export async function POST(req: Request) {
           const classification = sanitizeString(
             getValueByColumnName(rawRow, "KLASIFIKASI")
           );
-          let retentionYears = parseRetentionYears(
+          let retensiAktif = parseRetentionYears(
             getValueByColumnName(rawRow, "RETENSI AKTIF")
           );
 
-          // Auto-fix retention years if classification rule exists and autoFix is enabled
+          // Auto-fix retensi aktif jika classification rule exists dan autoFix diaktifkan
           if (classification && autoFix) {
             const rule = getClassificationRule(classification);
             if (rule) {
-              retentionYears = rule.retentionYears;
+              retensiAktif = rule.retensiAktif; // Selalu 2 tahun
             }
           }
 
@@ -533,7 +553,7 @@ export async function POST(req: Request) {
               getValueByColumnName(rawRow, "KETERANGAN")
             ),
             entryDate: batchEntryDate,
-            retentionYears: retentionYears,
+            retentionYears: retensiAktif, // Menggunakan retensi aktif yang sudah difix jika perlu
             status:
               getValueByColumnName(rawRow, "STATUS") &&
               statusMap[getValueByColumnName(rawRow, "STATUS")?.toString()]

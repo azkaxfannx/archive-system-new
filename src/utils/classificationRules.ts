@@ -2,30 +2,159 @@
 export interface ClassificationRule {
   code: string;
   name: string;
-  retentionYears: number;
+  retensiAktif: number; // Selalu 2 tahun untuk semua
+  retensiInaktif: number; // Berbeda-beda sesuai klasifikasi
   description?: string;
 }
 
 export const CLASSIFICATION_RULES: ClassificationRule[] = [
   {
-    code: "KU",
-    name: "Keuangan & Kepegawaian",
-    retentionYears: 10,
-    description: "Dokumen kepegawaian terkait mutasi pegawai",
+    code: "DL",
+    name: "Pendidikan & Pelatihan",
+    retensiAktif: 2,
+    retensiInaktif: 3,
+    description: "",
   },
   {
-    code: "TEK",
-    name: "Teknis",
-    retentionYears: 5,
-    description: "Dokumen struktur organisasi",
+    code: "UM",
+    name: "Umum",
+    retensiAktif: 2,
+    retensiInaktif: 0, // Total 2 tahun (2 aktif + 0 inaktif)
+    description: "Dokumen umum dan surat menyurat",
+  },
+  {
+    code: "HK",
+    name: "Hukum",
+    retensiAktif: 2,
+    retensiInaktif: 4,
+    description: "",
+  },
+  {
+    code: "HM",
+    name: "Kehumasan",
+    retensiAktif: 2,
+    retensiInaktif: 3,
+    description: "",
+  },
+  {
+    code: "KL",
+    name: "K3L",
+    retensiAktif: 2,
+    retensiInaktif: 3,
+    description: "",
+  },
+  {
+    code: "KP",
+    name: "Kepegawaian",
+    retensiAktif: 2,
+    retensiInaktif: 3,
+    description: "",
+  },
+  {
+    code: "KS",
+    name: "Kerjasama",
+    retensiAktif: 2,
+    retensiInaktif: 3,
+    description: "",
+  },
+  {
+    code: "KU",
+    name: "Keuangan",
+    retensiAktif: 2,
+    retensiInaktif: 8,
+    description: "",
+  },
+  {
+    code: "MK",
+    name: "Manajemen Kearsipan",
+    retensiAktif: 2,
+    retensiInaktif: 3,
+    description: "",
+  },
+  {
+    code: "OT",
+    name: "Organisasi dan Tatalaksana",
+    retensiAktif: 2,
+    retensiInaktif: 5,
+    description: "",
+  },
+  {
+    code: "PD",
+    name: "Pengadaan",
+    retensiAktif: 2,
+    retensiInaktif: 8,
+    description: "",
+  },
+  {
+    code: "PJ",
+    name: "Pelayanan Jasa Kapal",
+    retensiAktif: 2,
+    retensiInaktif: 3,
+    description: "",
+  },
+  {
+    code: "PP",
+    name: "Pengelolaan Aset & Properti Perusahaan",
+    retensiAktif: 2,
+    retensiInaktif: 8,
+    description: "",
   },
   {
     code: "PR",
-    name: "Perlengkapan",
-    retentionYears: 7,
-    description: "Perlengkapan kantor dan inventaris",
+    name: "Perencanaan",
+    retensiAktif: 2,
+    retensiInaktif: 3,
+    description: "",
   },
-  // Tambahkan aturan klasifikasi lainnya sesuai kebutuhan
+  {
+    code: "PS",
+    name: "Pemasaran",
+    retensiAktif: 2,
+    retensiInaktif: 3,
+    description: "",
+  },
+  {
+    code: "PU",
+    name: "Pengembangan Bisnis",
+    retensiAktif: 2,
+    retensiInaktif: 3,
+    description: "",
+  },
+  {
+    code: "PW",
+    name: "Pengawasan",
+    retensiAktif: 2,
+    retensiInaktif: 5,
+    description: "",
+  },
+  {
+    code: "RT",
+    name: "Rumah Tangga",
+    retensiAktif: 2,
+    retensiInaktif: 5,
+    description: "",
+  },
+  {
+    code: "SI",
+    name: "Sistem Informasi",
+    retensiAktif: 2,
+    retensiInaktif: 5,
+    description: "",
+  },
+  {
+    code: "SK",
+    name: "Kesertariatan",
+    retensiAktif: 2,
+    retensiInaktif: 4,
+    description: "",
+  },
+  {
+    code: "TL",
+    name: "Tanggung Jawab Sosial & Lingkungan",
+    retensiAktif: 2,
+    retensiInaktif: 8,
+    description: "",
+  },
 ];
 
 export function getClassificationRule(
@@ -38,19 +167,30 @@ export function getClassificationRule(
   );
 }
 
-export function validateRetentionYear(
-  classification: string,
-  retentionYears: number
-): boolean {
-  const rule = getClassificationRule(classification);
-  if (!rule) return true; // Jika tidak ada aturan, dianggap valid
-  return rule.retentionYears === retentionYears;
+// Fungsi untuk validasi retensi aktif (harus selalu 2 tahun)
+export function validateRetensiAktif(retensiAktif: number): boolean {
+  return retensiAktif === 2;
 }
 
+// Interface untuk mismatch - HANYA RETENSI AKTIF dari Excel
 export interface RetentionMismatch {
   row: number;
   classification: string;
-  currentRetention: number;
-  expectedRetention: number;
+  currentRetensiAktif: number;
+  expectedRetensiAktif: number;
   ruleName: string;
+  retensiInaktifInfo: number; // Info saja, bukan dari Excel
+}
+
+// Fungsi validasi untuk import - HANYA CEK RETENSI AKTIF dari Excel
+export function validateRetentionFromExcel(
+  classification: string,
+  retensiAktif: number
+): { valid: boolean; rule: ClassificationRule | null } {
+  const rule = getClassificationRule(classification);
+  if (!rule) return { valid: true, rule: null }; // Tidak ada aturan = valid
+
+  const aktifValid = retensiAktif === rule.retensiAktif;
+
+  return { valid: aktifValid, rule };
 }

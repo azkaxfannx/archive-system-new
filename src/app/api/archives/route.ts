@@ -102,6 +102,26 @@ export async function GET(req: NextRequest) {
           case "nomorSurat":
             where.nomorSurat = { contains: value, mode: "insensitive" };
             break;
+          case "nomorBerkas":
+            if (value === "UMUM.") {
+              // Untuk kategori UMUM: cari yang tidak mengandung titik (.)
+              where.AND = [
+                {
+                  OR: [
+                    { nomorBerkas: { not: { contains: "." } } },
+                    { nomorBerkas: { equals: "-" } },
+                    { nomorBerkas: null },
+                  ],
+                },
+              ];
+            } else {
+              // Untuk kategori dengan prefix normal
+              where.nomorBerkas = {
+                startsWith: value,
+                mode: "insensitive",
+              };
+            }
+            break;
           case "judulBerkas":
             where.judulBerkas = { contains: value, mode: "insensitive" };
             break;
