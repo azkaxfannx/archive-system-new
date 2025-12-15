@@ -53,7 +53,6 @@ export default function ArchiveManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState("tanggal");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  const [selectedFilter, setSelectedFilter] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>(
     {}
   );
@@ -166,19 +165,19 @@ export default function ArchiveManagement() {
     useState(false);
   const [peminjamanErrorMessage, setPeminjamanErrorMessage] = useState("");
 
-  // UPDATED: Fetch archives excluding those with approved serah terima
+  // Use columnFilters.status - backend will filter by CALCULATED status
   const { archives, pagination, loading, error, mutate } = useArchives({
     page: currentPage,
     limit: itemsPerPage,
     search: searchQuery,
     sort: sortField,
     order: sortOrder,
-    status: selectedFilter,
+    status: columnFilters.status || "",
     filters: columnFilters,
     startMonth: periodFilters.startMonth,
     endMonth: periodFilters.endMonth,
     year: periodFilters.year,
-    excludeSerahTerima: true, // NEW: Exclude archives with approved serah terima
+    excludeSerahTerima: true,
   });
 
   // Header refresh trigger
@@ -256,10 +255,10 @@ export default function ArchiveManagement() {
       const queryParams = new URLSearchParams({
         limit: "999999",
         search: searchQuery,
-        status: selectedFilter,
+        status: columnFilters.status || "", // CHANGED: Use columnFilters.status
         sort: sortField,
         order: sortOrder,
-        excludeSerahTerima: "true", // NEW: Exclude from export too
+        excludeSerahTerima: "true",
         ...(periodFilters.year && { year: periodFilters.year }),
         ...(periodFilters.startMonth && {
           startMonth: periodFilters.startMonth,
@@ -439,18 +438,14 @@ export default function ArchiveManagement() {
     }
   };
 
-  // Update fungsi handleImport di ArchiveManagement.tsx
-
   const handleImport = async (file: File, autoFix: boolean) => {
     try {
       setIsLoading(true);
 
       const formData = new FormData();
       formData.append("file", file);
-
-      // Langsung kirim dengan autoFix parameter
       formData.append("autoFix", autoFix.toString());
-      formData.append("forceImport", "true"); // Selalu true karena sudah preview
+      formData.append("forceImport", "true");
 
       const response = await fetch("/api/archives/import", {
         method: "POST",
@@ -460,7 +455,6 @@ export default function ArchiveManagement() {
 
       const result = await response.json();
 
-      // Set message based on autoFix
       const message = autoFix
         ? "Import berhasil dengan masa retensi yang telah diperbaiki sesuai aturan klasifikasi"
         : result.message || "Import berhasil";
@@ -472,7 +466,6 @@ export default function ArchiveManagement() {
       setShowImportResultModal(true);
       mutate();
 
-      // Refresh stats
       fetch("/api/archives/stats", {
         credentials: "include",
       })
@@ -639,7 +632,6 @@ export default function ArchiveManagement() {
     }
   };
 
-  // Show loading while checking auth
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -669,7 +661,6 @@ export default function ArchiveManagement() {
           columnFilters={columnFilters}
         />
 
-        {/* REMOVED: Serah Terima button from table */}
         <ArchiveTable
           archives={archives}
           loading={loading}

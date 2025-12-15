@@ -1,4 +1,4 @@
-// hooks/useArchives.ts - UPDATED
+// hooks/useArchives.ts - Backend now handles calculated status filtering
 import useSWR from "swr";
 import { ArchiveRecord } from "@/types/archive";
 
@@ -10,11 +10,9 @@ interface UseArchivesParams {
   order?: "asc" | "desc";
   status?: string;
   filters?: Record<string, string>;
-  // New period filter parameters
   startMonth?: string;
   endMonth?: string;
   year?: string;
-  // NEW: Add excludeSerahTerima parameter
   excludeSerahTerima?: boolean;
 }
 
@@ -56,7 +54,7 @@ export function useArchives(params: UseArchivesParams) {
     startMonth = "",
     endMonth = "",
     year = "",
-    excludeSerahTerima = false, // NEW: Default to false
+    excludeSerahTerima = false,
   } = params;
 
   // Build query parameters
@@ -66,15 +64,13 @@ export function useArchives(params: UseArchivesParams) {
     search,
     sort,
     order,
-    status,
+    status, // Backend will now filter by CALCULATED status, not DB status
   });
 
-  // NEW: Add excludeSerahTerima parameter
   if (excludeSerahTerima) {
     queryParams.append("excludeSerahTerima", "true");
   }
 
-  // Add period filters if provided
   if (year) {
     queryParams.append("year", year);
   }

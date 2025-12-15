@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { requireAuth } from "@/utils/withAuth";
+import { getArchiveStatus } from "@/utils/calculateArchiveStatus";
 
 // GET - Fetch archives with pagination and filters
 export async function GET(req: NextRequest) {
@@ -14,11 +15,10 @@ export async function GET(req: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "10");
     const search = searchParams.get("search") || "";
-    const status = searchParams.get("status") || "";
+    const statusFilter = searchParams.get("status") || "";
     const sort = searchParams.get("sort") || "tanggal";
     const order = searchParams.get("order") || "desc";
 
-    // NEW: Exclude archives with approved serah terima
     const excludeSerahTerima =
       searchParams.get("excludeSerahTerima") === "true";
 
@@ -40,11 +40,8 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    if (status) {
-      where.status = status as any;
-    }
+    // REMOVED: status filter from where clause - will filter after calculation
 
-    // NEW: Exclude archives that have approved serah terima
     if (excludeSerahTerima) {
       where.serahTerimaArchives = {
         none: {
@@ -104,7 +101,6 @@ export async function GET(req: NextRequest) {
             break;
           case "nomorBerkas":
             if (value === "UMUM.") {
-              // Untuk kategori UMUM: cari yang tidak mengandung titik (.)
               where.AND = [
                 {
                   OR: [
@@ -115,7 +111,6 @@ export async function GET(req: NextRequest) {
                 },
               ];
             } else {
-              // Untuk kategori dengan prefix normal
               where.nomorBerkas = {
                 startsWith: value,
                 mode: "insensitive",
@@ -132,7 +127,7 @@ export async function GET(req: NextRequest) {
             where.jenisNaskahDinas = { contains: value, mode: "insensitive" };
             break;
           case "status":
-            where.status = value as any;
+            // IGNORE - will be handled after calculation
             break;
           case "kodeUnit":
             where.kodeUnit = { contains: value, mode: "insensitive" };
@@ -162,8 +157,6 @@ export async function GET(req: NextRequest) {
         orderBy.tanggal = "desc";
     }
 
-    const skip = (page - 1) * limit;
-
     const userFilter = user.role === "ADMIN" ? {} : { userId: user.userId };
 
     const finalWhere: Prisma.ArchiveWhereInput = {
@@ -171,41 +164,52 @@ export async function GET(req: NextRequest) {
       ...userFilter,
     };
 
-    const [archives, total] = await Promise.all([
-      prisma.archive.findMany({
-        where: finalWhere,
-        orderBy,
-        skip,
-        take: limit,
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              role: true,
-            },
+    // NEW: Fetch ALL matching archives first (without pagination)
+    const allArchives = await prisma.archive.findMany({
+      where: finalWhere,
+      orderBy,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
           },
-          // NEW: Include serah terima info to check status
-          serahTerimaArchives: {
-            include: {
-              serahTerima: {
-                select: {
-                  id: true,
-                  statusUsulan: true,
-                  nomorBeritaAcara: true,
-                },
+        },
+        serahTerimaArchives: {
+          include: {
+            serahTerima: {
+              select: {
+                id: true,
+                statusUsulan: true,
+                nomorBeritaAcara: true,
               },
             },
           },
         },
-      }),
-      prisma.archive.count({
-        where: finalWhere,
-      }),
-    ]);
+      },
+    });
+
+    // NEW: Filter by calculated status if statusFilter is provided
+    let filteredArchives = allArchives;
+
+    if (statusFilter) {
+      filteredArchives = allArchives.filter((archive) => {
+        const calculatedStatus = getArchiveStatus(
+          archive.tanggal,
+          archive.klasifikasi
+        );
+        return calculatedStatus === statusFilter;
+      });
+    }
+
+    // NEW: Apply pagination AFTER filtering
+    const total = filteredArchives.length;
+    const skip = (page - 1) * limit;
+    const paginatedArchives = filteredArchives.slice(skip, skip + limit);
 
     return NextResponse.json({
-      data: archives,
+      data: paginatedArchives,
       pagination: {
         page,
         limit,
