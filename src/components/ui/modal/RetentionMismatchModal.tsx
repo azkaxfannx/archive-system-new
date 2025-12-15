@@ -70,10 +70,10 @@ export default function RetentionMismatchModal({
                     {m.classification}
                   </td>
                   <td className="px-3 py-2 text-sm text-red-600 font-semibold">
-                    {m.currentRetention} tahun
+                    {m.currentRetensiAktif} tahun
                   </td>
                   <td className="px-3 py-2 text-sm text-green-600 font-semibold">
-                    {m.expectedRetention} tahun
+                    {m.expectedRetensiAktif} tahun
                   </td>
                   <td className="px-3 py-2 text-sm text-gray-700">
                     {m.ruleName}
