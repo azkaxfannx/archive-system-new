@@ -11,6 +11,7 @@ import { useArchives } from "@/hooks/useArchives";
 import { archiveAPI } from "@/services/archiveAPI";
 import * as ExcelJS from "exceljs";
 import { PAGINATION } from "@/utils/constants";
+import { calculateArchiveStatus } from "@/utils/calculateArchiveStatus";
 
 // Components
 import Header from "../layout/Header";
@@ -255,7 +256,7 @@ export default function ArchiveManagement() {
       const queryParams = new URLSearchParams({
         limit: "999999",
         search: searchQuery,
-        status: columnFilters.status || "", // CHANGED: Use columnFilters.status
+        status: columnFilters.status || "",
         sort: sortField,
         order: sortOrder,
         excludeSerahTerima: "true",
@@ -273,7 +274,7 @@ export default function ArchiveManagement() {
         credentials: "include",
       });
       const result = await response.json();
-      const allArchives: ArchiveData[] = result.data || [];
+      const allArchives = result.data || [];
 
       if (allArchives.length === 0) {
         setExportResult({
@@ -287,6 +288,7 @@ export default function ArchiveManagement() {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Data Arsip");
 
+      // Updated headers - removed TAHUN RETENSI, added TAHUN after PERIHAL
       const headers = [
         "KODE UNIT",
         "INDEKS",
@@ -298,19 +300,39 @@ export default function ArchiveManagement() {
         "NOMOR SURAT",
         "TANGGAL SURAT",
         "PERIHAL",
+        "TAHUN",
         "TINGKAT PERKEMBANGAN",
         "KONDISI",
         "LOKASI SIMPAN",
         "RETENSI AKTIF",
         "RETENSI INAKTIF",
         "KETERANGAN",
-        "TAHUN RETENSI",
         "STATUS",
       ];
 
       worksheet.addRow(headers);
 
-      allArchives.forEach((archive: ArchiveData) => {
+      allArchives.forEach((archive: any) => {
+        // Calculate status using the same logic as backend
+        const statusCalc = calculateArchiveStatus(
+          archive.tanggal,
+          archive.klasifikasi
+        );
+
+        // Map status to Indonesian
+        const statusMap: Record<string, string> = {
+          ACTIVE: "Aktif",
+          INACTIVE: "Inaktif",
+          DISPOSE_ELIGIBLE: "Siap Musnah",
+        };
+
+        const statusIndonesian = statusMap[statusCalc.status] || "Aktif";
+
+        // Extract year from tanggal
+        const tahun = archive.tanggal
+          ? new Date(archive.tanggal).getFullYear()
+          : archive.tahun || "";
+
         worksheet.addRow([
           archive.kodeUnit || "",
           archive.indeks || "",
@@ -324,17 +346,18 @@ export default function ArchiveManagement() {
             ? new Date(archive.tanggal).toLocaleDateString("id-ID")
             : "",
           archive.perihal || "",
+          tahun,
           archive.tingkatPerkembangan || "",
           archive.kondisi || "",
           archive.lokasiSimpan || "",
-          archive.retensiAktif || "",
-          archive.retensiInaktif || "",
+          `${statusCalc.retensiAktifYears} tahun`, // From calculation
+          `${statusCalc.retensiInaktifYears} tahun`, // From calculation
           archive.keterangan || "",
-          archive.retentionYears || "",
-          archive.status || "",
+          statusIndonesian, // Mapped status
         ]);
       });
 
+      // Style header row
       const headerRow = worksheet.getRow(1);
       headerRow.height = 25;
       headerRow.eachCell((cell) => {
@@ -361,6 +384,7 @@ export default function ArchiveManagement() {
         };
       });
 
+      // Style data rows
       for (let i = 2; i <= worksheet.rowCount; i++) {
         const row = worksheet.getRow(i);
         row.height = 20;
@@ -383,8 +407,26 @@ export default function ArchiveManagement() {
         });
       }
 
+      // Updated column widths (removed one column, so adjust array)
       const columnWidths = [
-        15, 10, 15, 25, 18, 20, 15, 15, 15, 25, 20, 12, 15, 15, 15, 20, 15, 12,
+        15, // KODE UNIT
+        10, // INDEKS
+        15, // NOMOR BERKAS
+        25, // JUDUL BERKAS
+        18, // NOMOR ISI BERKAS
+        20, // JENIS NASKAH DINAS
+        15, // KLASIFIKASI
+        15, // NOMOR SURAT
+        15, // TANGGAL SURAT
+        25, // PERIHAL
+        10, // TAHUN
+        20, // TINGKAT PERKEMBANGAN
+        12, // KONDISI
+        15, // LOKASI SIMPAN
+        15, // RETENSI AKTIF
+        15, // RETENSI INAKTIF
+        20, // KETERANGAN
+        15, // STATUS
       ];
 
       headers.forEach((header, index) => {
